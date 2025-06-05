@@ -3,6 +3,7 @@ Comprehensive integration tests spanning multiple tools and workflows.
 """
 
 import json
+
 import pytest
 from mcp.types import TextContent
 
@@ -29,7 +30,7 @@ async def test_complete_workflow_default_graph(client):
                 },
                 {
                     "subject": "http://example.org/workflow/person2",
-                    "predicate": "http://schema.org/name", 
+                    "predicate": "http://schema.org/name",
                     "object": "Workflow Person Two",
                 },
                 {
@@ -40,34 +41,27 @@ async def test_complete_workflow_default_graph(client):
             ]
         },
     )
-    
+
     # Step 2: Query using SPARQL
     sparql_result = await client.call_tool(
-        "rdf_query",
-        {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_query", {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
     )
     assert len(sparql_result) == 1
     # SPARQL results are returned as TextContent by FastMCP
     assert isinstance(sparql_result[0], TextContent)
-    
+
     # Step 3: Pattern matching
-    name_pattern_result = await client.call_tool(
-        "quads_for_pattern", 
-        {"predicate": "http://schema.org/name"}
-    )
+    name_pattern_result = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
     assert len(name_pattern_result) == 1
     assert isinstance(name_pattern_result[0], TextContent)
-    
+
     # Parse and verify pattern results
     quads_data = json.loads(name_pattern_result[0].text)
     quads = [QuadResult(**quad) for quad in quads_data]
     assert len(quads) >= 2  # Should have both people
-    
+
     # Step 4: Verify specific relationships
-    knows_result = await client.call_tool(
-        "quads_for_pattern",
-        {"predicate": "http://xmlns.com/foaf/0.1/knows"}
-    )
+    knows_result = await client.call_tool("quads_for_pattern", {"predicate": "http://xmlns.com/foaf/0.1/knows"})
     assert len(knows_result) == 1
     quads_data = json.loads(knows_result[0].text)
     knows_quads = [QuadResult(**quad) for quad in quads_data]
@@ -83,32 +77,28 @@ async def test_mixed_graph_operations(client, sample_graph_uri):
         "predicate": "http://schema.org/context",
         "object": "default",
     }
-    
+
     named_triple = {
         "subject": "http://example.org/mixed/shared",
-        "predicate": "http://schema.org/context", 
+        "predicate": "http://schema.org/context",
         "object": "named",
         "graph": sample_graph_uri,
     }
-    
+
     # Add to both graphs
     await client.call_tool("add_triples", {"triples": [default_triple]})
     await client.call_tool("add_triples", {"triples": [named_triple]})
-    
+
     # Query all graphs (should see both)
-    all_contexts = await client.call_tool(
-        "quads_for_pattern",
-        {"subject": "http://example.org/mixed/shared"}
-    )
+    all_contexts = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/mixed/shared"})
     assert len(all_contexts) == 1
     quads_data = json.loads(all_contexts[0].text)
     all_quads = [QuadResult(**quad) for quad in quads_data]
     assert len(all_quads) >= 2
-    
+
     # Query specific graph
     named_only = await client.call_tool(
-        "quads_for_pattern",
-        {"subject": "http://example.org/mixed/shared", "graph": sample_graph_uri}
+        "quads_for_pattern", {"subject": "http://example.org/mixed/shared", "graph": sample_graph_uri}
     )
     assert len(named_only) == 1
     quads_data = json.loads(named_only[0].text)
@@ -124,7 +114,7 @@ async def test_query_result_consistency(client):
     test_subject = "http://example.org/consistency/test"
     test_predicate = "http://schema.org/name"
     test_object = "Consistency Test"
-    
+
     await client.call_tool(
         "add_triples",
         {
@@ -137,33 +127,26 @@ async def test_query_result_consistency(client):
             ]
         },
     )
-    
+
     # Method 1: SPARQL SELECT
     sparql_result = await client.call_tool(
-        "rdf_query",
-        {"query": f"SELECT ?name WHERE {{ <{test_subject}> <{test_predicate}> ?name }}"}
+        "rdf_query", {"query": f"SELECT ?name WHERE {{ <{test_subject}> <{test_predicate}> ?name }}"}
     )
     assert len(sparql_result) == 1
-    
+
     # Method 2: Pattern matching by subject
-    pattern_by_subject = await client.call_tool(
-        "quads_for_pattern",
-        {"subject": test_subject}
-    )
+    pattern_by_subject = await client.call_tool("quads_for_pattern", {"subject": test_subject})
     assert len(pattern_by_subject) == 1
-    
+
     # Method 3: Pattern matching by predicate
-    pattern_by_predicate = await client.call_tool(
-        "quads_for_pattern", 
-        {"predicate": test_predicate}
-    )
+    pattern_by_predicate = await client.call_tool("quads_for_pattern", {"predicate": test_predicate})
     assert len(pattern_by_predicate) == 1
-    
+
     # All methods should find the same data
     # SPARQL should have the literal value
     sparql_data = sparql_result[0]
     assert any(test_object in str(binding) for binding in sparql_data)
-    
+
     # Pattern queries should have formatted results
     subject_quads_data = json.loads(pattern_by_subject[0].text)
     subject_quads = [QuadResult(**quad) for quad in subject_quads_data]
@@ -185,13 +168,13 @@ async def test_sparql_construct_to_pattern_roundtrip(client):
                 },
                 {
                     "subject": "http://example.org/construct/person",
-                    "predicate": "http://schema.org/familyName", 
+                    "predicate": "http://schema.org/familyName",
                     "object": "Doe",
                 },
             ]
         },
     )
-    
+
     # Use CONSTRUCT to create new virtual triples
     construct_result = await client.call_tool(
         "rdf_query",
@@ -208,12 +191,12 @@ async def test_sparql_construct_to_pattern_roundtrip(client):
             """
         },
     )
-    
+
     # CONSTRUCT should return TextContent
     assert len(construct_result) == 1
     assert isinstance(construct_result[0], TextContent)
     construct_text = construct_result[0].text
-    
+
     # Verify construct results contain expected data
     assert "John" in construct_text and "Doe" in construct_text
 
@@ -234,24 +217,21 @@ async def test_error_recovery_workflow(client):
             ]
         },
     )
-    
+
     # Perform invalid operation (should fail)
     try:
         await client.call_tool(
             "add_triples",
-            {"triples": [{"subject": "invalid-uri", "predicate": "http://schema.org/name", "object": "Invalid"}]}
+            {"triples": [{"subject": "invalid-uri", "predicate": "http://schema.org/name", "object": "Invalid"}]},
         )
-        assert False, "Expected ToolError for invalid URI"
+        raise AssertionError("Expected ToolError for invalid URI")
     except Exception:
         pass  # Expected to fail
-    
+
     # Verify previous data is still accessible
-    recovery_result = await client.call_tool(
-        "quads_for_pattern",
-        {"subject": "http://example.org/recovery/test"}
-    )
+    recovery_result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/recovery/test"})
     assert len(recovery_result) == 1
-    
+
     # Perform another valid operation
     await client.call_tool(
         "add_triples",
@@ -265,17 +245,14 @@ async def test_error_recovery_workflow(client):
             ]
         },
     )
-    
+
     # Verify both valid operations succeeded
-    all_recovery = await client.call_tool(
-        "quads_for_pattern",
-        {"predicate": "http://schema.org/name"}
-    )
+    all_recovery = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
     assert len(all_recovery) == 1
     quads_data = json.loads(all_recovery[0].text)
     recovery_quads = [QuadResult(**quad) for quad in quads_data]
     recovery_subjects = [quad.subject for quad in recovery_quads]
-    
+
     assert any("recovery/test>" in subj for subj in recovery_subjects)
     assert any("recovery/test2>" in subj for subj in recovery_subjects)
 
@@ -298,26 +275,22 @@ async def test_batch_operations_consistency(client):
                 "object": str(20 + i),
             },
         ])
-    
+
     # Add all at once
     await client.call_tool("add_triples", {"triples": batch_triples})
-    
+
     # Verify all data was added
     all_names = await client.call_tool(
-        "rdf_query",
-        {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_query", {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"}
     )
     assert len(all_names) == 1
-    
+
     # Pattern query should find all subjects
-    all_batch_people = await client.call_tool(
-        "quads_for_pattern",
-        {"predicate": "http://schema.org/name"}
-    )
+    all_batch_people = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
     assert len(all_batch_people) == 1
     quads_data = json.loads(all_batch_people[0].text)
     name_quads = [QuadResult(**quad) for quad in quads_data]
-    
+
     # Should have at least 50 name triples from this batch
     batch_name_quads = [q for q in name_quads if "batch/person" in q.subject]
     assert len(batch_name_quads) >= 50

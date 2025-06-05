@@ -21,7 +21,7 @@ async def test_typed_literals(client):
             ]
         },
     )
-    
+
     # Query should work
     result = await client.call_tool(
         "rdf_query", {"query": "SELECT ?age WHERE { <http://example.org/person/typed> <http://schema.org/age> ?age }"}
@@ -43,18 +43,18 @@ async def test_language_tagged_literals(client):
                     "object": "Hello@en",
                 },
                 {
-                    "subject": "http://example.org/person/multilingual", 
+                    "subject": "http://example.org/person/multilingual",
                     "predicate": "http://schema.org/name",
                     "object": "Bonjour@fr",
                 },
             ]
         },
     )
-    
+
     # Query should find both
     result = await client.call_tool(
-        "rdf_query", 
-        {"query": "SELECT ?name WHERE { <http://example.org/person/multilingual> <http://schema.org/name> ?name }"}
+        "rdf_query",
+        {"query": "SELECT ?name WHERE { <http://example.org/person/multilingual> <http://schema.org/name> ?name }"},
     )
     assert len(result) == 1
 
@@ -68,7 +68,7 @@ async def test_unicode_content(client):
         "🌍🌎🌏",  # Emoji
         "Ελληνικά",  # Greek
     ]
-    
+
     for i, unicode_str in enumerate(unicode_strings):
         await client.call_tool(
             "add_triples",
@@ -82,22 +82,20 @@ async def test_unicode_content(client):
                 ]
             },
         )
-    
+
     # Query should work
-    result = await client.call_tool(
-        "rdf_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"}
-    )
+    result = await client.call_tool("rdf_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"})
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
 async def test_multiline_strings(client):
     """Test multiline strings with quotes and escapes."""
-    multiline_object = '''Line 1
+    multiline_object = """Line 1
 Line 2 with "quotes"
 Line 3 with 'single quotes'
-Line 4 with \\ backslash'''
-    
+Line 4 with \\ backslash"""
+
     await client.call_tool(
         "add_triples",
         {
@@ -110,7 +108,7 @@ Line 4 with \\ backslash'''
             ]
         },
     )
-    
+
     # Should be queryable
     result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/multiline/test"})
     assert len(result) == 1
@@ -121,14 +119,14 @@ async def test_duplicate_triples(client):
     """Test adding identical triples multiple times."""
     triple_data = {
         "subject": "http://example.org/duplicate/test",
-        "predicate": "http://schema.org/name", 
-        "object": "Duplicate Test"
+        "predicate": "http://schema.org/name",
+        "object": "Duplicate Test",
     }
-    
+
     # Add same triple three times
     for _ in range(3):
         await client.call_tool("add_triples", {"triples": [triple_data]})
-    
+
     # Should only appear once in results
     result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/duplicate/test"})
     # Note: RDF semantics may deduplicate or not - test documents behavior
@@ -150,7 +148,7 @@ async def test_self_referential_triples(client):
             ]
         },
     )
-    
+
     # Should be queryable
     result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/self/reference"})
     assert len(result) == 1
@@ -170,17 +168,17 @@ async def test_circular_references(client):
                 },
                 {
                     "subject": "http://example.org/person/bob",
-                    "predicate": "http://xmlns.com/foaf/0.1/knows", 
+                    "predicate": "http://xmlns.com/foaf/0.1/knows",
                     "object": "http://example.org/person/alice",
                 },
             ]
         },
     )
-    
+
     # Both should be queryable
     result_alice = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/alice"})
     result_bob = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/bob"})
-    
+
     assert len(result_alice) == 1
     assert len(result_bob) == 1
 
@@ -192,22 +190,24 @@ async def test_cross_graph_isolation(client, sample_graph_uri):
     triple_data = {
         "subject": "http://example.org/isolation/test",
         "predicate": "http://schema.org/name",
-        "object": "Isolation Test"
+        "object": "Isolation Test",
     }
-    
+
     # Add to default graph
     await client.call_tool("add_triples", {"triples": [triple_data]})
-    
+
     # Add to named graph
     triple_with_graph = {**triple_data, "graph": sample_graph_uri}
     await client.call_tool("add_triples", {"triples": [triple_with_graph]})
-    
+
     # Query default graph only
     default_result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/isolation/test"})
-    
-    # Query named graph only  
-    named_result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/isolation/test", "graph": sample_graph_uri})
-    
+
+    # Query named graph only
+    named_result = await client.call_tool(
+        "quads_for_pattern", {"subject": "http://example.org/isolation/test", "graph": sample_graph_uri}
+    )
+
     # Should have data in both but separately
     assert len(default_result) >= 1
     assert len(named_result) >= 1

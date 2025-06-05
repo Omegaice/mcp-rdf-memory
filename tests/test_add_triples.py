@@ -123,7 +123,7 @@ async def test_add_triples_invalid_identifiers(client):
         "   ",  # Whitespace only
         # Note: Other cases like "not-a-uri" might be valid CURIEs or literals
     ]
-    
+
     for identifier in invalid_identifiers:
         with pytest.raises(ToolError):
             await client.call_tool(
@@ -145,14 +145,14 @@ async def test_add_triples_valid_curie_and_urn(client):
     """Test that CURIEs and URNs are accepted as valid identifiers."""
     valid_identifiers = [
         "rdf:type",
-        "foaf:knows", 
+        "foaf:knows",
         "schema:name",
         "urn:uuid:12345-67890",
         "urn:isbn:1234567890",
         "mailto:test@example.org",
         "file:///local/path",
     ]
-    
+
     for identifier in valid_identifiers:
         # Should not raise error
         result = await client.call_tool(
@@ -193,7 +193,7 @@ async def test_add_triples_missing_fields(client):
                 ]
             },
         )
-    
+
     # Missing predicate
     with pytest.raises((ToolError, ValueError)):
         await client.call_tool(

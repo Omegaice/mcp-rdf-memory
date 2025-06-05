@@ -148,7 +148,7 @@ async def test_quads_for_pattern_invalid_identifiers(client):
     """Test that invalid identifiers in pattern queries raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool("quads_for_pattern", {"subject": ""})  # Empty string
-    
+
     with pytest.raises(ToolError):
         await client.call_tool("quads_for_pattern", {"predicate": "   "})  # Whitespace only
 

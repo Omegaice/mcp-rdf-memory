@@ -23,7 +23,7 @@ async def test_sparql_case_insensitive_keywords(client):
         "CLEAR graph <http://example.org/graph>",
         "Clear GRAPH <http://example.org/graph>",
     ]
-    
+
     for query in case_variations:
         with pytest.raises(ToolError):
             await client.call_tool("rdf_query", {"query": query})
@@ -35,15 +35,15 @@ async def test_sparql_keywords_in_comments(client):
     # These should work - keywords are in comments, not actual operations
     comment_queries = [
         "# This INSERT is just a comment\nSELECT ?s WHERE { ?s ?p ?o }",
-        "SELECT ?s WHERE { ?s ?p ?o } # DELETE comment here", 
+        "SELECT ?s WHERE { ?s ?p ?o } # DELETE comment here",
         "# DROP, CLEAR, CREATE are forbidden\nASK { ?s ?p ?o }",
     ]
-    
+
     for query in comment_queries:
         # These should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
         # Should return valid results (empty or otherwise)
-        assert isinstance(result, (list, bool))
+        assert isinstance(result, list | bool)
 
 
 @pytest.mark.asyncio
@@ -60,26 +60,26 @@ async def test_sparql_keywords_in_string_literals(client):
                     "object": "INSERT failed",
                 },
                 {
-                    "subject": "http://example.org/message/2", 
+                    "subject": "http://example.org/message/2",
                     "predicate": "http://schema.org/text",
                     "object": "The DELETE operation was not allowed",
                 },
             ]
         },
     )
-    
+
     # These queries contain keywords in string literals - should work
     literal_queries = [
         "SELECT ?msg WHERE { ?x <http://schema.org/text> 'INSERT failed' }",
         "SELECT ?msg WHERE { ?x <http://schema.org/text> 'DELETE operation' }",
         "ASK { ?x <http://schema.org/text> 'CLEAR the cache' }",
     ]
-    
+
     for query in literal_queries:
         # Should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
         # Should return valid results
-        assert isinstance(result, (list, bool))
+        assert isinstance(result, list | bool)
 
 
 @pytest.mark.asyncio
@@ -92,11 +92,11 @@ async def test_sparql_keywords_as_substrings(client):
         "ASK { ?x <http://example.org/dropped> ?value }",  # Contains DROP
         "SELECT ?cleared WHERE { ?x <http://example.org/cleared> ?cleared }",  # Contains CLEAR
     ]
-    
+
     for query in substring_queries:
         # Should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
-        assert isinstance(result, (list, bool))
+        assert isinstance(result, list | bool)
 
 
 @pytest.mark.asyncio
@@ -106,24 +106,24 @@ async def test_sparql_all_forbidden_keywords(client):
         "INSERT DATA { <http://example.org/test> <http://example.org/prop> 'value' }",
         "DELETE WHERE { ?s ?p ?o }",
         "DROP GRAPH <http://example.org/graph>",
-        "CLEAR GRAPH <http://example.org/graph>", 
+        "CLEAR GRAPH <http://example.org/graph>",
         "CREATE GRAPH <http://example.org/graph>",
         "LOAD <http://example.org/data.rdf>",
         "COPY <http://example.org/source> TO <http://example.org/target>",
         "MOVE <http://example.org/source> TO <http://example.org/target>",
         "ADD <http://example.org/source> TO <http://example.org/target>",
     ]
-    
+
     for operation in forbidden_operations:
         with pytest.raises(ToolError) as exc_info:
             await client.call_tool("rdf_query", {"query": operation})
-        
+
         # Error message should mention that modifications are not allowed
         error_msg = str(exc_info.value).lower()
         assert any(keyword in error_msg for keyword in ["forbidden", "not allowed", "modification"])
 
 
-@pytest.mark.asyncio 
+@pytest.mark.asyncio
 async def test_sparql_complex_valid_queries(client):
     """Test complex but valid read-only SPARQL queries."""
     # Add test data
@@ -138,28 +138,26 @@ async def test_sparql_complex_valid_queries(client):
                 },
                 {
                     "subject": "http://example.org/person/complex1",
-                    "predicate": "http://schema.org/age", 
+                    "predicate": "http://schema.org/age",
                     "object": "25",
                 },
                 {
                     "subject": "http://example.org/person/complex2",
                     "predicate": "http://schema.org/name",
-                    "object": "Complex Person Two", 
+                    "object": "Complex Person Two",
                 },
             ]
         },
     )
-    
+
     complex_queries = [
         # Query with PREFIX
         """
         PREFIX schema: <http://schema.org/>
         SELECT ?name WHERE { ?person schema:name ?name }
         """,
-        
         # Query with FILTER
         "SELECT ?name WHERE { ?person <http://schema.org/name> ?name . FILTER(STRLEN(?name) > 10) }",
-        
         # Query with OPTIONAL
         """
         SELECT ?name ?age WHERE { 
@@ -167,7 +165,6 @@ async def test_sparql_complex_valid_queries(client):
             OPTIONAL { ?person <http://schema.org/age> ?age }
         }
         """,
-        
         # Query with UNION
         """
         SELECT ?value WHERE {
@@ -177,7 +174,7 @@ async def test_sparql_complex_valid_queries(client):
         }
         """,
     ]
-    
+
     for query in complex_queries:
         result = await client.call_tool("rdf_query", {"query": query})
         assert isinstance(result, list)

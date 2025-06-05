@@ -164,7 +164,7 @@ async def test_rdf_query_empty_query(client):
     """Test that empty SPARQL queries raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool("rdf_query", {"query": ""})
-    
+
     with pytest.raises(ToolError):
         await client.call_tool("rdf_query", {"query": "   "})
 
@@ -177,7 +177,7 @@ async def test_rdf_query_completely_invalid_syntax(client):
         "{ ?s ?p ?o",  # Missing closing brace
         "SELECT ?s WHERE",  # Incomplete WHERE clause
     ]
-    
+
     for query in invalid_queries:
         with pytest.raises(ToolError):
             await client.call_tool("rdf_query", {"query": query})

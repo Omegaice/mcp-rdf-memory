@@ -4,9 +4,11 @@ MCP RDF Memory Server
 Model Context Protocol server providing RDF triple store capabilities to LLMs through SPARQL.
 """
 
+from typing import Annotated
+
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PlainValidator, WithJsonSchema
 from pyoxigraph import (
     BlankNode,
     DefaultGraph,
@@ -20,7 +22,6 @@ from pyoxigraph import (
 )
 
 # Constants
-URI_SCHEMES = ("http://", "https://")
 FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
 
 # Create in-memory RDF store
@@ -29,29 +30,66 @@ store = Store()
 mcp = FastMCP("RDF Memory")
 
 
-def validate_uri(uri: str, context: str = "URI") -> None:
-    """Validate that a string is a valid RDF identifier (URI, CURIE, URN, etc.)."""
-    # Check for obviously invalid cases
-    if not uri or uri.isspace():
-        raise ToolError(f"{context} cannot be empty or whitespace-only")
-    
-    # Let pyoxigraph handle detailed URI validation
-    # Accept: HTTP/HTTPS URIs, CURIEs (rdf:type), URNs (urn:uuid:123), etc.
+def validate_rdf_identifier(value) -> str:
+    """Validate and return string representation of RDF identifier."""
+    if isinstance(value, NamedNode):
+        return value.value
+
+    if not isinstance(value, str):
+        raise ValueError("RDF identifier must be a string")
+
+    if not value or value.isspace():
+        raise ValueError("RDF identifier cannot be empty or whitespace-only")
+
     try:
-        # Test if pyoxigraph can create a NamedNode with this URI
-        NamedNode(uri)
+        # Validate by creating NamedNode, but return string for JSON compatibility
+        NamedNode(value)
+        return value
     except ValueError as e:
-        raise ToolError(f"{context} is not a valid RDF identifier: {e}") from e
+        raise ValueError(f"Invalid RDF identifier: {e}") from e
+
+
+def validate_rdf_node(value) -> str:
+    """Validate and return string representation of RDF node."""
+    if isinstance(value, NamedNode | Literal):
+        return value.value
+
+    if not isinstance(value, str):
+        raise ValueError("RDF node must be a string")
+
+    if not value or value.isspace():
+        raise ValueError("RDF node value cannot be empty")
+
+    # All strings are valid as RDF nodes (either identifiers or literals)
+    return value
+
+
+# Helper functions to convert validated strings back to RDF objects
+def create_rdf_identifier(value: str) -> NamedNode:
+    """Convert validated string to NamedNode."""
+    return NamedNode(value)
 
 
 def create_rdf_node(value: str) -> NamedNode | Literal:
-    """Create an appropriate RDF node (NamedNode for URIs/CURIEs, Literal for other values)."""
-    # Try to create a NamedNode first - if it fails, treat as Literal
+    """Convert validated string to appropriate RDF node type."""
     try:
-        return NamedNode(value)
+        return NamedNode(value)  # Try as identifier first
     except ValueError:
-        # If NamedNode creation fails, treat as a literal value
-        return Literal(value)
+        return Literal(value)  # Fall back to literal
+
+
+# Pydantic validated types with JSON schema support
+RDFIdentifier = Annotated[
+    str,
+    PlainValidator(validate_rdf_identifier),
+    WithJsonSchema({"type": "string", "description": "RDF identifier (URI, CURIE, URN, etc.)"}),
+]
+
+RDFNode = Annotated[
+    str,
+    PlainValidator(validate_rdf_node),
+    WithJsonSchema({"type": "string", "description": "RDF node (identifier or literal value)"}),
+]
 
 
 def format_rdf_object(obj: NamedNode | Literal | BlankNode | Triple) -> str:
@@ -87,30 +125,30 @@ def format_predicate(predicate: NamedNode | BlankNode) -> str:
 def _remove_sparql_comments_and_strings(query: str) -> str:
     """Remove comments and string literals from SPARQL query for keyword checking."""
     import re
-    
+
     # Remove single-line comments (# comment)
-    query = re.sub(r'#.*?$', ' ', query, flags=re.MULTILINE)
-    
+    query = re.sub(r"#.*?$", " ", query, flags=re.MULTILINE)
+
     # Remove string literals in single quotes
-    query = re.sub(r"'[^']*'", ' ', query)
-    
-    # Remove string literals in double quotes  
-    query = re.sub(r'"[^"]*"', ' ', query)
-    
+    query = re.sub(r"'[^']*'", " ", query)
+
+    # Remove string literals in double quotes
+    query = re.sub(r'"[^"]*"', " ", query)
+
     # Remove multi-line string literals (triple quotes)
-    query = re.sub(r'""".*?"""', ' ', query, flags=re.DOTALL)
-    query = re.sub(r"'''.*?'''", ' ', query, flags=re.DOTALL)
-    
+    query = re.sub(r'""".*?"""', " ", query, flags=re.DOTALL)
+    query = re.sub(r"'''.*?'''", " ", query, flags=re.DOTALL)
+
     return query
 
 
 class TripleModel(BaseModel):
     """Model for a single RDF triple."""
 
-    subject: str = Field(description="URI string for the subject")
-    predicate: str = Field(description="URI string for the predicate")
-    object: str = Field(description="URI string or literal value for the object")
-    graph: str | None = Field(default=None, description="Optional URI string for the named graph")
+    subject: RDFIdentifier = Field(description="RDF identifier for the subject")
+    predicate: RDFIdentifier = Field(description="RDF identifier for the predicate")
+    object: RDFNode = Field(description="RDF node (identifier or literal) for the object")
+    graph: RDFIdentifier | None = Field(default=None, description="Optional RDF identifier for the named graph")
 
 
 class QuadResult(BaseModel):
@@ -126,22 +164,13 @@ class QuadResult(BaseModel):
 def add_triples(triples: list[TripleModel]) -> None:
     """Add multiple RDF triples to the store in a single transaction."""
     quads = []
-    for i, triple in enumerate(triples):
-        # Validate and create nodes using helper functions
-        validate_uri(triple.subject, f"Triple {i + 1}: Subject")
-        validate_uri(triple.predicate, f"Triple {i + 1}: Predicate")
-
-        subject_node = NamedNode(triple.subject)
-        predicate_node = NamedNode(triple.predicate)
+    for triple in triples:
+        # Convert validated strings to RDF objects
+        subject_node = create_rdf_identifier(triple.subject)
+        predicate_node = create_rdf_identifier(triple.predicate)
         object_node = create_rdf_node(triple.object)
+        graph_node = create_rdf_identifier(triple.graph) if triple.graph else None
 
-        # Create graph node if specified
-        graph_node = None
-        if triple.graph is not None:
-            validate_uri(triple.graph, f"Triple {i + 1}: Graph")
-            graph_node = NamedNode(triple.graph)
-
-        # Create quad
         quad = Quad(subject_node, predicate_node, object_node, graph_node)
         quads.append(quad)
 
@@ -154,40 +183,17 @@ def add_triples(triples: list[TripleModel]) -> None:
 
 @mcp.tool()
 def quads_for_pattern(
-    subject: str | None = None, predicate: str | None = None, object: str | None = None, graph: str | None = None
+    subject: RDFIdentifier | None = None,
+    predicate: RDFIdentifier | None = None,
+    object: RDFNode | None = None,
+    graph: RDFIdentifier | None = None,
 ) -> list[QuadResult]:
     """Find quads matching the given pattern. Use None for wildcards."""
-    # Convert string parameters to RDF nodes or None for wildcards
-    try:
-        # Validate non-None parameters first
-        if subject is not None:
-            validate_uri(subject, "Subject pattern")
-            subject_node = NamedNode(subject)
-        else:
-            subject_node = None
-            
-        if predicate is not None:
-            validate_uri(predicate, "Predicate pattern")
-            predicate_node = NamedNode(predicate)
-        else:
-            predicate_node = None
-            
-        if object is not None:
-            object_node = create_rdf_node(object)
-        else:
-            object_node = None
-            
-        if graph is not None:
-            validate_uri(graph, "Graph pattern")
-            graph_node = NamedNode(graph)
-        else:
-            graph_node = None
-            
-    except ToolError:
-        # Re-raise ToolErrors from validation
-        raise
-    except ValueError as e:
-        raise ToolError(f"Invalid identifier format in pattern parameters: {e}") from e
+    # Convert validated strings to RDF objects for pattern matching
+    subject_node = create_rdf_identifier(subject) if subject else None
+    predicate_node = create_rdf_identifier(predicate) if predicate else None
+    object_node = create_rdf_node(object) if object else None
+    graph_node = create_rdf_identifier(graph) if graph else None
 
     # Query the store for matching quads
     try:
@@ -230,11 +236,12 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
     # Validate query is read-only - check for forbidden keywords as actual operations
     # Remove comments and string literals before checking
     cleaned_query = _remove_sparql_comments_and_strings(query.upper())
-    
+
     for keyword in FORBIDDEN_SPARQL_KEYWORDS:
         # Check if keyword appears as standalone operation (word boundary)
         import re
-        if re.search(rf'\b{keyword}\b', cleaned_query):
+
+        if re.search(rf"\b{keyword}\b", cleaned_query):
             raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
 
     # Execute the SPARQL query
