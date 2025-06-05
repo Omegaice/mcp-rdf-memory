@@ -113,3 +113,134 @@ async def test_add_triple_validation_error(client):
             "add_triples",
             {"triples": [{"subject": "not-a-valid-uri", "predicate": "http://schema.org/name", "object": "John Doe"}]},
         )
+
+
+@pytest.mark.asyncio
+async def test_add_triples_invalid_identifiers(client):
+    """Test that truly invalid RDF identifiers raise appropriate errors."""
+    invalid_identifiers = [
+        "",  # Empty string
+        "   ",  # Whitespace only
+        # Note: Other cases like "not-a-uri" might be valid CURIEs or literals
+    ]
+    
+    for identifier in invalid_identifiers:
+        with pytest.raises(ToolError):
+            await client.call_tool(
+                "add_triples",
+                {
+                    "triples": [
+                        {
+                            "subject": identifier,
+                            "predicate": "http://schema.org/name",
+                            "object": "Test",
+                        }
+                    ]
+                },
+            )
+
+
+@pytest.mark.asyncio
+async def test_add_triples_valid_curie_and_urn(client):
+    """Test that CURIEs and URNs are accepted as valid identifiers."""
+    valid_identifiers = [
+        "rdf:type",
+        "foaf:knows", 
+        "schema:name",
+        "urn:uuid:12345-67890",
+        "urn:isbn:1234567890",
+        "mailto:test@example.org",
+        "file:///local/path",
+    ]
+    
+    for identifier in valid_identifiers:
+        # Should not raise error
+        result = await client.call_tool(
+            "add_triples",
+            {
+                "triples": [
+                    {
+                        "subject": "http://example.org/test",
+                        "predicate": identifier,
+                        "object": "Test Value",
+                    }
+                ]
+            },
+        )
+        assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_add_triples_empty_list(client):
+    """Test that empty triple list is handled gracefully."""
+    result = await client.call_tool("add_triples", {"triples": []})
+    assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_add_triples_missing_fields(client):
+    """Test that missing required fields raise validation errors."""
+    # Missing subject
+    with pytest.raises((ToolError, ValueError)):
+        await client.call_tool(
+            "add_triples",
+            {
+                "triples": [
+                    {
+                        "predicate": "http://schema.org/name",
+                        "object": "Test",
+                    }
+                ]
+            },
+        )
+    
+    # Missing predicate
+    with pytest.raises((ToolError, ValueError)):
+        await client.call_tool(
+            "add_triples",
+            {
+                "triples": [
+                    {
+                        "subject": "http://example.org/test",
+                        "object": "Test",
+                    }
+                ]
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_add_triples_invalid_graph_uri(client):
+    """Test that invalid graph URIs raise errors."""
+    with pytest.raises(ToolError):
+        await client.call_tool(
+            "add_triples",
+            {
+                "triples": [
+                    {
+                        "subject": "http://example.org/test",
+                        "predicate": "http://schema.org/name",
+                        "object": "Test",
+                        "graph": "",  # Empty graph URI
+                    }
+                ]
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_add_triples_invalid_predicate(client):
+    """Test that invalid predicates raise errors."""
+    with pytest.raises(ToolError):
+        await client.call_tool(
+            "add_triples",
+            {
+                "triples": [
+                    {
+                        "subject": "http://example.org/test",
+                        "predicate": "",  # Empty predicate
+                        "object": "Test Value",
+                    }
+                ]
+            },
+        )

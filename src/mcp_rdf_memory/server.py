@@ -30,14 +30,28 @@ mcp = FastMCP("RDF Memory")
 
 
 def validate_uri(uri: str, context: str = "URI") -> None:
-    """Validate that a string is a valid HTTP(S) URI."""
-    if not uri.startswith(URI_SCHEMES):
-        raise ToolError(f"{context} must be a valid HTTP(S) URI")
+    """Validate that a string is a valid RDF identifier (URI, CURIE, URN, etc.)."""
+    # Check for obviously invalid cases
+    if not uri or uri.isspace():
+        raise ToolError(f"{context} cannot be empty or whitespace-only")
+    
+    # Let pyoxigraph handle detailed URI validation
+    # Accept: HTTP/HTTPS URIs, CURIEs (rdf:type), URNs (urn:uuid:123), etc.
+    try:
+        # Test if pyoxigraph can create a NamedNode with this URI
+        NamedNode(uri)
+    except ValueError as e:
+        raise ToolError(f"{context} is not a valid RDF identifier: {e}") from e
 
 
 def create_rdf_node(value: str) -> NamedNode | Literal:
-    """Create an appropriate RDF node (NamedNode for URIs, Literal for other values)."""
-    return NamedNode(value) if value.startswith(URI_SCHEMES) else Literal(value)
+    """Create an appropriate RDF node (NamedNode for URIs/CURIEs, Literal for other values)."""
+    # Try to create a NamedNode first - if it fails, treat as Literal
+    try:
+        return NamedNode(value)
+    except ValueError:
+        # If NamedNode creation fails, treat as a literal value
+        return Literal(value)
 
 
 def format_rdf_object(obj: NamedNode | Literal | BlankNode | Triple) -> str:
@@ -68,6 +82,26 @@ def format_predicate(predicate: NamedNode | BlankNode) -> str:
         return f"<{predicate.value}>"
     # BlankNode case
     return f"_:{predicate.value}"
+
+
+def _remove_sparql_comments_and_strings(query: str) -> str:
+    """Remove comments and string literals from SPARQL query for keyword checking."""
+    import re
+    
+    # Remove single-line comments (# comment)
+    query = re.sub(r'#.*?$', ' ', query, flags=re.MULTILINE)
+    
+    # Remove string literals in single quotes
+    query = re.sub(r"'[^']*'", ' ', query)
+    
+    # Remove string literals in double quotes  
+    query = re.sub(r'"[^"]*"', ' ', query)
+    
+    # Remove multi-line string literals (triple quotes)
+    query = re.sub(r'""".*?"""', ' ', query, flags=re.DOTALL)
+    query = re.sub(r"'''.*?'''", ' ', query, flags=re.DOTALL)
+    
+    return query
 
 
 class TripleModel(BaseModel):
@@ -103,7 +137,7 @@ def add_triples(triples: list[TripleModel]) -> None:
 
         # Create graph node if specified
         graph_node = None
-        if triple.graph:
+        if triple.graph is not None:
             validate_uri(triple.graph, f"Triple {i + 1}: Graph")
             graph_node = NamedNode(triple.graph)
 
@@ -125,12 +159,35 @@ def quads_for_pattern(
     """Find quads matching the given pattern. Use None for wildcards."""
     # Convert string parameters to RDF nodes or None for wildcards
     try:
-        subject_node = NamedNode(subject) if subject else None
-        predicate_node = NamedNode(predicate) if predicate else None
-        object_node = create_rdf_node(object) if object else None
-        graph_node = NamedNode(graph) if graph else None
+        # Validate non-None parameters first
+        if subject is not None:
+            validate_uri(subject, "Subject pattern")
+            subject_node = NamedNode(subject)
+        else:
+            subject_node = None
+            
+        if predicate is not None:
+            validate_uri(predicate, "Predicate pattern")
+            predicate_node = NamedNode(predicate)
+        else:
+            predicate_node = None
+            
+        if object is not None:
+            object_node = create_rdf_node(object)
+        else:
+            object_node = None
+            
+        if graph is not None:
+            validate_uri(graph, "Graph pattern")
+            graph_node = NamedNode(graph)
+        else:
+            graph_node = None
+            
+    except ToolError:
+        # Re-raise ToolErrors from validation
+        raise
     except ValueError as e:
-        raise ToolError(f"Invalid URI format in pattern parameters: {e}") from e
+        raise ToolError(f"Invalid identifier format in pattern parameters: {e}") from e
 
     # Query the store for matching quads
     try:
@@ -170,10 +227,14 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
 
     Modification queries (INSERT, DELETE, DROP, CLEAR) are not allowed.
     """
-    # Validate query is read-only using constant
-    query_upper = query.upper()
+    # Validate query is read-only - check for forbidden keywords as actual operations
+    # Remove comments and string literals before checking
+    cleaned_query = _remove_sparql_comments_and_strings(query.upper())
+    
     for keyword in FORBIDDEN_SPARQL_KEYWORDS:
-        if keyword in query_upper:
+        # Check if keyword appears as standalone operation (word boundary)
+        import re
+        if re.search(rf'\b{keyword}\b', cleaned_query):
             raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
 
     # Execute the SPARQL query

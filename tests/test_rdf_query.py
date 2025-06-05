@@ -157,3 +157,27 @@ async def test_rdf_query_modification_blocked(client):
     # Try DELETE query
     with pytest.raises(ToolError):
         await client.call_tool("rdf_query", {"query": "DELETE WHERE { ?s ?p ?o }"})
+
+
+@pytest.mark.asyncio
+async def test_rdf_query_empty_query(client):
+    """Test that empty SPARQL queries raise errors."""
+    with pytest.raises(ToolError):
+        await client.call_tool("rdf_query", {"query": ""})
+    
+    with pytest.raises(ToolError):
+        await client.call_tool("rdf_query", {"query": "   "})
+
+
+@pytest.mark.asyncio
+async def test_rdf_query_completely_invalid_syntax(client):
+    """Test various completely invalid SPARQL syntax."""
+    invalid_queries = [
+        "INVALID SPARQL SYNTAX",
+        "{ ?s ?p ?o",  # Missing closing brace
+        "SELECT ?s WHERE",  # Incomplete WHERE clause
+    ]
+    
+    for query in invalid_queries:
+        with pytest.raises(ToolError):
+            await client.call_tool("rdf_query", {"query": query})

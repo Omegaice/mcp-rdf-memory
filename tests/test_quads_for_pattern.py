@@ -5,6 +5,7 @@ Tests for the quads_for_pattern tool.
 import json
 
 import pytest
+from fastmcp.exceptions import ToolError
 from mcp.types import TextContent
 
 from mcp_rdf_memory.server import QuadResult
@@ -140,3 +141,21 @@ async def test_quads_for_pattern_no_matches(client):
 
     # No matches returns empty list
     assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_invalid_identifiers(client):
+    """Test that invalid identifiers in pattern queries raise errors."""
+    with pytest.raises(ToolError):
+        await client.call_tool("quads_for_pattern", {"subject": ""})  # Empty string
+    
+    with pytest.raises(ToolError):
+        await client.call_tool("quads_for_pattern", {"predicate": "   "})  # Whitespace only
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_all_none(client):
+    """Test pattern query with all None values (wildcard)."""
+    result = await client.call_tool("quads_for_pattern", {})
+    # Should not raise error, may return empty or existing data
+    assert isinstance(result, list)
