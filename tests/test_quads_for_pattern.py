@@ -18,19 +18,22 @@ async def test_quads_for_pattern_tool_available(client):
 async def test_quads_for_pattern_find_by_subject(client):
     """Test finding quads by subject pattern."""
     # First add a triple
-    await client.call_tool("add_triples", {
-        "triples": [{
-            "subject": "http://example.org/person/bob",
-            "predicate": "http://schema.org/name",
-            "object": "Bob Smith"
-        }]
-    })
-    
+    await client.call_tool(
+        "add_triples",
+        {
+            "triples": [
+                {
+                    "subject": "http://example.org/person/bob",
+                    "predicate": "http://schema.org/name",
+                    "object": "Bob Smith",
+                }
+            ]
+        },
+    )
+
     # Find quads with specific subject
-    result = await client.call_tool("quads_for_pattern", {
-        "subject": "http://example.org/person/bob"
-    })
-    
+    result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/bob"})
+
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert "Bob Smith" in result[0].text
@@ -41,26 +44,27 @@ async def test_quads_for_pattern_find_by_subject(client):
 async def test_quads_for_pattern_find_by_predicate(client):
     """Test finding quads by predicate pattern."""
     # Add multiple triples with same predicate
-    await client.call_tool("add_triples", {
-        "triples": [
-            {
-                "subject": "http://example.org/person/charlie",
-                "predicate": "http://schema.org/email",
-                "object": "charlie@example.com"
-            },
-            {
-                "subject": "http://example.org/person/diana",
-                "predicate": "http://schema.org/email", 
-                "object": "diana@example.com"
-            }
-        ]
-    })
-    
+    await client.call_tool(
+        "add_triples",
+        {
+            "triples": [
+                {
+                    "subject": "http://example.org/person/charlie",
+                    "predicate": "http://schema.org/email",
+                    "object": "charlie@example.com",
+                },
+                {
+                    "subject": "http://example.org/person/diana",
+                    "predicate": "http://schema.org/email",
+                    "object": "diana@example.com",
+                },
+            ]
+        },
+    )
+
     # Find all email triples
-    result = await client.call_tool("quads_for_pattern", {
-        "predicate": "http://schema.org/email"
-    })
-    
+    result = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/email"})
+
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert "charlie@example.com" in result[0].text
@@ -71,20 +75,23 @@ async def test_quads_for_pattern_find_by_predicate(client):
 async def test_quads_for_pattern_with_named_graph(client, sample_graph_uri):
     """Test finding quads in a specific named graph."""
     # Add triple to specific graph
-    await client.call_tool("add_triples", {
-        "triples": [{
-            "subject": "http://example.org/person/eve",
-            "predicate": "http://schema.org/name",
-            "object": "Eve Johnson",
-            "graph": sample_graph_uri
-        }]
-    })
-    
+    await client.call_tool(
+        "add_triples",
+        {
+            "triples": [
+                {
+                    "subject": "http://example.org/person/eve",
+                    "predicate": "http://schema.org/name",
+                    "object": "Eve Johnson",
+                    "graph": sample_graph_uri,
+                }
+            ]
+        },
+    )
+
     # Find quads in specific graph
-    result = await client.call_tool("quads_for_pattern", {
-        "graph": sample_graph_uri
-    })
-    
+    result = await client.call_tool("quads_for_pattern", {"graph": sample_graph_uri})
+
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert "Eve Johnson" in result[0].text
@@ -95,17 +102,18 @@ async def test_quads_for_pattern_with_named_graph(client, sample_graph_uri):
 async def test_quads_for_pattern_wildcard_search(client):
     """Test finding all quads with wildcard pattern."""
     # Add a test triple
-    await client.call_tool("add_triples", {
-        "triples": [{
-            "subject": "http://example.org/person/frank",
-            "predicate": "http://schema.org/age",
-            "object": "30"
-        }]
-    })
-    
+    await client.call_tool(
+        "add_triples",
+        {
+            "triples": [
+                {"subject": "http://example.org/person/frank", "predicate": "http://schema.org/age", "object": "30"}
+            ]
+        },
+    )
+
     # Find all quads (no pattern specified)
     result = await client.call_tool("quads_for_pattern", {})
-    
+
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     # Should contain multiple results from previous tests
@@ -116,10 +124,8 @@ async def test_quads_for_pattern_wildcard_search(client):
 async def test_quads_for_pattern_no_matches(client):
     """Test pattern that matches no quads."""
     # Search for non-existent subject
-    result = await client.call_tool("quads_for_pattern", {
-        "subject": "http://example.org/person/nonexistent"
-    })
-    
+    result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/nonexistent"})
+
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
     assert "no quads found" in result[0].text.lower() or result[0].text.strip() == ""

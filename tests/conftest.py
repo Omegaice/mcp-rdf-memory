@@ -19,11 +19,7 @@ async def client():
 @pytest.fixture
 def sample_triple():
     """Provide a sample RDF triple for testing."""
-    return {
-        "subject": "http://example.org/person/test",
-        "predicate": "http://schema.org/name",
-        "object": "Test Person"
-    }
+    return {"subject": "http://example.org/person/test", "predicate": "http://schema.org/name", "object": "Test Person"}
 
 
 @pytest.fixture
