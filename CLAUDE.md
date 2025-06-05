@@ -17,6 +17,9 @@ uv run fastmcp dev src/mcp_rdf_memory/server.py:mcp
 # Run tests
 uv run pytest
 
+# Lint and fix code
+uv run ruff check --fix
+
 # Install for Claude Desktop
 uv run fastmcp install src/mcp_rdf_memory/server.py:mcp --name "RDF Memory"
 ```
