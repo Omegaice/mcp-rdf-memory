@@ -1,0 +1,1 @@
+The core intent of this project is to build a Model Context Protocol server that allows an LLM to store and retrieve RDF triples as well as query using SPARQL.
