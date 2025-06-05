@@ -7,12 +7,122 @@ Model Context Protocol server providing RDF triple store capabilities to LLMs th
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, Field
-from pyoxigraph import Literal, NamedNode, Quad, Store
+from pyoxigraph import BlankNode, DefaultGraph, Literal, NamedNode, Quad, QuerySolutions, QueryTriples, Store, Triple
+
+# Constants
+URI_SCHEMES = ("http://", "https://")
+FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
 
 # Create in-memory RDF store
 store = Store()
 
 mcp = FastMCP("RDF Memory")
+
+
+def validate_uri(uri: str, context: str = "URI") -> None:
+    """Validate that a string is a valid HTTP(S) URI."""
+    if not uri.startswith(URI_SCHEMES):
+        raise ToolError(f"{context} must be a valid HTTP(S) URI")
+
+
+def create_rdf_node(value: str) -> NamedNode | Literal:
+    """Create an appropriate RDF node (NamedNode for URIs, Literal for other values)."""
+    return NamedNode(value) if value.startswith(URI_SCHEMES) else Literal(value)
+
+
+def format_rdf_object(obj: NamedNode | Literal | BlankNode | Triple) -> str:
+    """Format an RDF object for display."""
+    if isinstance(obj, NamedNode):
+        return f"<{obj.value}>"
+    if isinstance(obj, Literal):
+        return f'"{obj.value}"'
+    if isinstance(obj, BlankNode):
+        return f"_:{obj.value}"
+    # Triple case
+    return str(obj)
+
+
+def format_subject(subject: NamedNode | BlankNode | Triple) -> str:
+    """Format an RDF subject for display."""
+    if isinstance(subject, NamedNode):
+        return f"<{subject.value}>"
+    if isinstance(subject, BlankNode):
+        return f"_:{subject.value}"
+    # Triple case
+    return str(subject)
+
+
+def format_predicate(predicate: NamedNode | BlankNode) -> str:
+    """Format an RDF predicate for display."""
+    if isinstance(predicate, NamedNode):
+        return f"<{predicate.value}>"
+    # BlankNode case
+    return f"_:{predicate.value}"
+
+
+def format_triple(
+    subject: NamedNode | BlankNode | Triple,
+    predicate: NamedNode | BlankNode,
+    obj: NamedNode | Literal | BlankNode | Triple,
+    graph: NamedNode | BlankNode | DefaultGraph | None = None,
+) -> str:
+    """Format an RDF triple/quad for display."""
+    subject_str = format_subject(subject)
+    predicate_str = format_predicate(predicate)
+    object_str = format_rdf_object(obj)
+
+    # Handle graph case
+    if graph is None or isinstance(graph, DefaultGraph):
+        return f"{subject_str} {predicate_str} {object_str}"
+
+    if isinstance(graph, NamedNode):
+        return f"{subject_str} {predicate_str} {object_str} GRAPH <{graph.value}>"
+
+    # BlankNode case
+    return f"{subject_str} {predicate_str} {object_str} GRAPH _:{graph.value}"
+
+
+def format_query_solutions(results: QuerySolutions) -> str:
+    """Format SELECT query results (QuerySolutions) for display."""
+    bindings = list(results)
+
+    if not bindings:
+        return "Query returned no results."
+
+    formatted_results = []
+    for i, binding in enumerate(bindings):
+        binding_strs = []
+        binding_str = str(binding)
+
+        if "=" in binding_str:
+            pairs = binding_str.strip("{}").split(", ")
+            for pair in pairs:
+                if "=" in pair:
+                    var, val = pair.split("=", 1)
+                    binding_strs.append(f"{var}: {val}")
+                else:
+                    binding_strs.append(pair)
+        else:
+            binding_strs.append(binding_str)
+
+        formatted_results.append(f"Result {i + 1}: " + ", ".join(binding_strs))
+
+    return f"Query returned {len(bindings)} result(s):\n" + "\n".join(formatted_results)
+
+
+def format_query_triples(results: QueryTriples) -> str:
+    """Format CONSTRUCT/DESCRIBE query results (QueryTriples) for display."""
+    triples = list(results)
+
+    if not triples:
+        return "Query returned no triples."
+
+    formatted_triples = []
+    for triple in triples:
+        formatted = format_triple(triple.subject, triple.predicate, triple.object)
+        formatted_triples.append(f"{formatted} .")
+
+    return f"Query returned {len(triples)} triple(s):\n" + "\n".join(formatted_triples)
 
 
 class TripleModel(BaseModel):
@@ -28,59 +138,58 @@ class TripleModel(BaseModel):
 def add_triples(triples: list[TripleModel]) -> str:
     """Add multiple RDF triples to the store in a single transaction."""
     try:
-        if not triples:
-            raise ToolError("No triples provided")
-
         quads = []
         for i, triple in enumerate(triples):
-            subject = triple.subject
-            predicate = triple.predicate
-            object_value = triple.object
-            graph = triple.graph
+            try:
+                # Validate and create nodes using helper functions
+                validate_uri(triple.subject, f"Triple {i + 1}: Subject")
+                validate_uri(triple.predicate, f"Triple {i + 1}: Predicate")
 
-            # Validate and create subject URI
-            if not subject.startswith(("http://", "https://")):
-                raise ToolError(f"Triple {i + 1}: Subject must be a valid HTTP(S) URI")
-            subject_node = NamedNode(subject)
+                subject_node = NamedNode(triple.subject)
+                predicate_node = NamedNode(triple.predicate)
+                object_node = create_rdf_node(triple.object)
 
-            # Validate and create predicate URI
-            if not predicate.startswith(("http://", "https://")):
-                raise ToolError(f"Triple {i + 1}: Predicate must be a valid HTTP(S) URI")
-            predicate_node = NamedNode(predicate)
+                # Create graph node if specified
+                graph_node = None
+                if triple.graph:
+                    validate_uri(triple.graph, f"Triple {i + 1}: Graph")
+                    graph_node = NamedNode(triple.graph)
 
-            # Create object node - check if it's a URI or literal
-            object_node = (
-                NamedNode(object_value) if object_value.startswith(("http://", "https://")) else Literal(object_value)
-            )
+                # Create quad
+                quad = Quad(subject_node, predicate_node, object_node, graph_node)
+                quads.append(quad)
 
-            # Create graph node if specified
-            graph_node = None
-            if graph:
-                if not graph.startswith(("http://", "https://")):
-                    raise ToolError(f"Triple {i + 1}: Graph must be a valid HTTP(S) URI")
-                graph_node = NamedNode(graph)
-
-            # Create quad
-            quad = Quad(subject_node, predicate_node, object_node, graph_node)
-            quads.append(quad)
+            except ToolError:
+                # Re-raise ToolErrors with context preserved
+                raise
+            except ValueError as e:
+                raise ToolError(f"Triple {i + 1}: Invalid URI format - {e}") from e
+            except Exception as e:
+                raise ToolError(f"Triple {i + 1}: Failed to create RDF quad - {e}") from e
 
         # Add all quads in a single transaction
-        store.extend(quads)
+        try:
+            store.extend(quads)
+        except Exception as e:
+            raise ToolError(f"Failed to store triples in RDF database: {e}") from e
 
         # Build success message
         graph_counts = {}
         for quad in quads:
-            # Handle both named graphs and default graph
-            graph_name = quad.graph_name.value if hasattr(quad.graph_name, "value") else "default graph"
+            if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
+                graph_name = "default graph"
+            else:
+                graph_name = quad.graph_name.value
             graph_counts[graph_name] = graph_counts.get(graph_name, 0) + 1
 
         graph_summary = ", ".join(f"{count} to {graph}" for graph, count in graph_counts.items())
         return f"Successfully added {len(quads)} triple(s): {graph_summary}"
 
-    except ValueError as e:
-        raise ToolError(f"Invalid URI format: {e}") from e
+    except ToolError:
+        # Re-raise ToolErrors as-is
+        raise
     except Exception as e:
-        raise ToolError(f"Failed to add triples: {e}") from e
+        raise ToolError(f"Unexpected error while adding triples: {e}") from e
 
 
 @mcp.tool()
@@ -90,61 +199,39 @@ def quads_for_pattern(
     """Find quads matching the given pattern. Use None for wildcards."""
     try:
         # Convert string parameters to RDF nodes or None for wildcards
-        subject_node = NamedNode(subject) if subject else None
-        predicate_node = NamedNode(predicate) if predicate else None
-
-        # Handle object - could be URI or literal
-        object_node = None
-        if object:
-            object_node = NamedNode(object) if object.startswith(("http://", "https://")) else Literal(object)
-
-        graph_node = NamedNode(graph) if graph else None
+        try:
+            subject_node = NamedNode(subject) if subject else None
+            predicate_node = NamedNode(predicate) if predicate else None
+            object_node = create_rdf_node(object) if object else None
+            graph_node = NamedNode(graph) if graph else None
+        except ValueError as e:
+            raise ToolError(f"Invalid URI format in pattern parameters: {e}") from e
 
         # Query the store for matching quads
-        quads = list(store.quads_for_pattern(subject_node, predicate_node, object_node, graph_node))
+        try:
+            quads = list(store.quads_for_pattern(subject_node, predicate_node, object_node, graph_node))
+        except Exception as e:
+            raise ToolError(f"Failed to execute pattern query against RDF store: {e}") from e
 
         if not quads:
             return "No quads found matching the pattern."
 
-        # Format results
-        results = []
-        for quad in quads:
-            # Assert correct types for IDE diagnostics
-            assert isinstance(quad.subject, NamedNode), f"Expected NamedNode for subject, got {type(quad.subject)}"
-            assert isinstance(quad.predicate, NamedNode), (
-                f"Expected NamedNode for predicate, got {type(quad.predicate)}"
-            )
+        # Format results using helper function
+        try:
+            results = []
+            for quad in quads:
+                formatted = format_triple(quad.subject, quad.predicate, quad.object, quad.graph_name)
+                results.append(formatted)
 
-            subject_str = f"<{quad.subject.value}>"
-            predicate_str = f"<{quad.predicate.value}>"
+            return f"Found {len(quads)} quad(s):\n" + "\n".join(results)
+        except Exception as e:
+            raise ToolError(f"Failed to format query results: {e}") from e
 
-            # Format object based on type
-            if hasattr(quad.object, "value"):
-                # Object can be NamedNode or Literal, both have .value
-                assert isinstance(quad.object, NamedNode | Literal), (
-                    f"Expected NamedNode or Literal for object, got {type(quad.object)}"
-                )
-                object_str = f"<{quad.object.value}>" if str(quad.object).startswith("<") else f'"{quad.object.value}"'
-            else:
-                object_str = str(quad.object)
-
-            # Include graph if present
-            if quad.graph_name and hasattr(quad.graph_name, "value"):
-                # Graph should be NamedNode when it has a value
-                assert isinstance(quad.graph_name, NamedNode), (
-                    f"Expected NamedNode for named graph, got {type(quad.graph_name)}"
-                )
-                graph_str = f" GRAPH <{quad.graph_name.value}>"
-                results.append(f"{subject_str} {predicate_str} {object_str}{graph_str}")
-            else:
-                results.append(f"{subject_str} {predicate_str} {object_str}")
-
-        return f"Found {len(quads)} quad(s):\n" + "\n".join(results)
-
-    except ValueError as e:
-        raise ToolError(f"Invalid URI format: {e}") from e
+    except ToolError:
+        # Re-raise ToolErrors as-is
+        raise
     except Exception as e:
-        raise ToolError(f"Failed to query quads: {e}") from e
+        raise ToolError(f"Unexpected error while querying quads: {e}") from e
 
 
 @mcp.tool()
@@ -155,85 +242,42 @@ def rdf_query(query: str) -> str:
     Modification queries (INSERT, DELETE, DROP, CLEAR) are not allowed.
     """
     try:
-        # Validate query is read-only
+        # Validate query is read-only using constant
         query_upper = query.upper()
-        forbidden_keywords = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
-
-        for keyword in forbidden_keywords:
+        for keyword in FORBIDDEN_SPARQL_KEYWORDS:
             if keyword in query_upper:
                 raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
 
         # Execute the SPARQL query
-        results = store.query(query)
+        try:
+            results = store.query(query)
+        except ValueError as e:
+            raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
+        except Exception as e:
+            raise ToolError(f"Failed to execute SPARQL query against RDF store: {e}") from e
 
-        # Format results based on query type - use runtime type checks
-        # Import types for isinstance checks
-        from pyoxigraph import QueryBoolean, QuerySolutions, QueryTriples
+        # Format results based on query type using early returns
+        try:
+            from pyoxigraph import QueryBoolean, QuerySolutions
 
-        if isinstance(results, QueryBoolean):
-            # ASK query returns QueryBoolean (not iterable)
-            return f"Query result: {results}"
-        elif isinstance(results, QuerySolutions):
-            # SELECT query returns QuerySolutions (iterable)
-            bindings = list(results)
+            # ASK query returns QueryBoolean
+            if isinstance(results, QueryBoolean):
+                return f"Query result: {results}"
 
-            if not bindings:
-                return "Query returned no results."
+            # SELECT query returns QuerySolutions
+            if isinstance(results, QuerySolutions):
+                return format_query_solutions(results)
 
-            # Format SELECT results as table-like output
-            formatted_results = []
-            for i, binding in enumerate(bindings):
-                binding_strs = []
-                # Use string representation and parse manually for now
-                binding_str = str(binding)
-                # Extract variable=value pairs from string representation
-                if "=" in binding_str:
-                    # Parse format like "?name=literal"
-                    pairs = binding_str.strip("{}").split(", ")
-                    for pair in pairs:
-                        if "=" in pair:
-                            var, val = pair.split("=", 1)
-                            binding_strs.append(f"{var}: {val}")
-                        else:
-                            binding_strs.append(pair)
-                else:
-                    # Fallback to string representation
-                    binding_strs.append(binding_str)
+            # CONSTRUCT/DESCRIBE query returns QueryTriples
+            return format_query_triples(results)
+        except Exception as e:
+            raise ToolError(f"Failed to format SPARQL query results: {e}") from e
 
-                formatted_results.append(f"Result {i + 1}: " + ", ".join(binding_strs))
-
-            return f"Query returned {len(bindings)} result(s):\n" + "\n".join(formatted_results)
-
-        else:
-            # CONSTRUCT/DESCRIBE query returns QueryTriples (iterable)
-            assert isinstance(results, QueryTriples), f"Expected QueryTriples, got {type(results)}"
-            triples = list(results)
-
-            if not triples:
-                return "Query returned no triples."
-
-            # Format triples for output
-            formatted_triples = []
-            for triple in triples:
-                subject_str = f"<{triple.subject.value}>"
-                predicate_str = f"<{triple.predicate.value}>"
-
-                # Format object based on type
-                if hasattr(triple.object, "value"):
-                    object_str = (
-                        f"<{triple.object.value}>" if str(triple.object).startswith("<") else f'"{triple.object.value}"'
-                    )
-                else:
-                    object_str = str(triple.object)
-
-                formatted_triples.append(f"{subject_str} {predicate_str} {object_str} .")
-
-            return f"Query returned {len(triples)} triple(s):\n" + "\n".join(formatted_triples)
-
-    except ValueError as e:
-        raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
+    except ToolError:
+        # Re-raise ToolErrors as-is
+        raise
     except Exception as e:
-        raise ToolError(f"Failed to execute SPARQL query: {e}") from e
+        raise ToolError(f"Unexpected error while executing SPARQL query: {e}") from e
 
 
 if __name__ == "__main__":
