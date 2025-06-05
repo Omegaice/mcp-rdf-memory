@@ -38,3 +38,6 @@ if "DELETE" in query.upper() or "INSERT" in query.upper():
 
 ## Server Entry Point
 `src/mcp_rdf_memory/server.py:mcp` - FastMCP server instance
+
+## Debugging
+- Use IDE diagnostics to identify and troubleshoot issues
