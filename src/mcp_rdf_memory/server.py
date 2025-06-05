@@ -7,7 +7,17 @@ Model Context Protocol server providing RDF triple store capabilities to LLMs th
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, Field
-from pyoxigraph import BlankNode, DefaultGraph, Literal, NamedNode, Quad, QuerySolutions, QueryTriples, Store, Triple
+from pyoxigraph import (
+    BlankNode,
+    DefaultGraph,
+    Literal,
+    NamedNode,
+    Quad,
+    QueryBoolean,
+    QuerySolutions,
+    Store,
+    Triple,
+)
 
 # Constants
 URI_SCHEMES = ("http://", "https://")
@@ -60,71 +70,6 @@ def format_predicate(predicate: NamedNode | BlankNode) -> str:
     return f"_:{predicate.value}"
 
 
-def format_triple(
-    subject: NamedNode | BlankNode | Triple,
-    predicate: NamedNode | BlankNode,
-    obj: NamedNode | Literal | BlankNode | Triple,
-    graph: NamedNode | BlankNode | DefaultGraph | None = None,
-) -> str:
-    """Format an RDF triple/quad for display."""
-    subject_str = format_subject(subject)
-    predicate_str = format_predicate(predicate)
-    object_str = format_rdf_object(obj)
-
-    # Handle graph case
-    if graph is None or isinstance(graph, DefaultGraph):
-        return f"{subject_str} {predicate_str} {object_str}"
-
-    if isinstance(graph, NamedNode):
-        return f"{subject_str} {predicate_str} {object_str} GRAPH <{graph.value}>"
-
-    # BlankNode case
-    return f"{subject_str} {predicate_str} {object_str} GRAPH _:{graph.value}"
-
-
-def format_query_solutions(results: QuerySolutions) -> str:
-    """Format SELECT query results (QuerySolutions) for display."""
-    bindings = list(results)
-
-    if not bindings:
-        return "Query returned no results."
-
-    formatted_results = []
-    for i, binding in enumerate(bindings):
-        binding_strs = []
-        binding_str = str(binding)
-
-        if "=" in binding_str:
-            pairs = binding_str.strip("{}").split(", ")
-            for pair in pairs:
-                if "=" in pair:
-                    var, val = pair.split("=", 1)
-                    binding_strs.append(f"{var}: {val}")
-                else:
-                    binding_strs.append(pair)
-        else:
-            binding_strs.append(binding_str)
-
-        formatted_results.append(f"Result {i + 1}: " + ", ".join(binding_strs))
-
-    return f"Query returned {len(bindings)} result(s):\n" + "\n".join(formatted_results)
-
-
-def format_query_triples(results: QueryTriples) -> str:
-    """Format CONSTRUCT/DESCRIBE query results (QueryTriples) for display."""
-    triples = list(results)
-
-    if not triples:
-        return "Query returned no triples."
-
-    formatted_triples = []
-    for triple in triples:
-        formatted = format_triple(triple.subject, triple.predicate, triple.object)
-        formatted_triples.append(f"{formatted} .")
-
-    return f"Query returned {len(triples)} triple(s):\n" + "\n".join(formatted_triples)
-
-
 class TripleModel(BaseModel):
     """Model for a single RDF triple."""
 
@@ -148,32 +93,23 @@ def add_triples(triples: list[TripleModel]) -> None:
     """Add multiple RDF triples to the store in a single transaction."""
     quads = []
     for i, triple in enumerate(triples):
-        try:
-            # Validate and create nodes using helper functions
-            validate_uri(triple.subject, f"Triple {i + 1}: Subject")
-            validate_uri(triple.predicate, f"Triple {i + 1}: Predicate")
+        # Validate and create nodes using helper functions
+        validate_uri(triple.subject, f"Triple {i + 1}: Subject")
+        validate_uri(triple.predicate, f"Triple {i + 1}: Predicate")
 
-            subject_node = NamedNode(triple.subject)
-            predicate_node = NamedNode(triple.predicate)
-            object_node = create_rdf_node(triple.object)
+        subject_node = NamedNode(triple.subject)
+        predicate_node = NamedNode(triple.predicate)
+        object_node = create_rdf_node(triple.object)
 
-            # Create graph node if specified
-            graph_node = None
-            if triple.graph:
-                validate_uri(triple.graph, f"Triple {i + 1}: Graph")
-                graph_node = NamedNode(triple.graph)
+        # Create graph node if specified
+        graph_node = None
+        if triple.graph:
+            validate_uri(triple.graph, f"Triple {i + 1}: Graph")
+            graph_node = NamedNode(triple.graph)
 
-            # Create quad
-            quad = Quad(subject_node, predicate_node, object_node, graph_node)
-            quads.append(quad)
-
-        except ToolError:
-            # Re-raise ToolErrors with context preserved
-            raise
-        except ValueError as e:
-            raise ToolError(f"Triple {i + 1}: Invalid URI format - {e}") from e
-        except Exception as e:
-            raise ToolError(f"Triple {i + 1}: Failed to create RDF quad - {e}") from e
+        # Create quad
+        quad = Quad(subject_node, predicate_node, object_node, graph_node)
+        quads.append(quad)
 
     # Add all quads in a single transaction
     try:
@@ -203,27 +139,24 @@ def quads_for_pattern(
         raise ToolError(f"Failed to execute pattern query against RDF store: {e}") from e
 
     # Convert to structured results
-    try:
-        results = []
-        for quad in quads:
-            # Format graph name
-            if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
-                graph_name = "default graph"
-            else:
-                graph_name = quad.graph_name.value
+    results = []
+    for quad in quads:
+        # Format graph name
+        if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
+            graph_name = "default graph"
+        else:
+            graph_name = quad.graph_name.value
 
-            results.append(
-                QuadResult(
-                    subject=format_subject(quad.subject),
-                    predicate=format_predicate(quad.predicate),
-                    object=format_rdf_object(quad.object),
-                    graph=graph_name,
-                )
+        results.append(
+            QuadResult(
+                subject=format_subject(quad.subject),
+                predicate=format_predicate(quad.predicate),
+                object=format_rdf_object(quad.object),
+                graph=graph_name,
             )
+        )
 
-        return results
-    except Exception as e:
-        raise ToolError(f"Failed to format query results: {e}") from e
+    return results
 
 
 @mcp.tool()
@@ -252,40 +185,36 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
         raise ToolError(f"Failed to execute SPARQL query against RDF store: {e}") from e
 
     # Return results based on query type
-    try:
-        from pyoxigraph import QueryBoolean, QuerySolutions
 
-        # ASK query returns QueryBoolean
-        if isinstance(results, QueryBoolean):
-            return bool(results)
+    # ASK query returns QueryBoolean
+    if isinstance(results, QueryBoolean):
+        return bool(results)
 
-        # SELECT query returns QuerySolutions - convert to list of dicts
-        if isinstance(results, QuerySolutions):
-            solutions = []
-            variables = results.variables
-            for solution in results:
-                binding = {}
-                # Access each variable by name
-                for var in variables:
-                    var_name = var.value  # Get variable name without ? prefix
-                    value = solution[var_name]
-                    if value is not None:
-                        binding[var_name] = format_rdf_object(value)
-                solutions.append(binding)
-            return solutions
+    # SELECT query returns QuerySolutions - convert to list of dicts
+    if isinstance(results, QuerySolutions):
+        solutions = []
+        variables = results.variables
+        for solution in results:
+            binding = {}
+            # Access each variable by name
+            for var in variables:
+                var_name = var.value  # Get variable name without ? prefix
+                value = solution[var_name]
+                if value is not None:
+                    binding[var_name] = format_rdf_object(value)
+            solutions.append(binding)
+        return solutions
 
-        # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
-        return [
-            QuadResult(
-                subject=format_subject(triple.subject),
-                predicate=format_predicate(triple.predicate),
-                object=format_rdf_object(triple.object),
-                graph="default graph",  # Triples from CONSTRUCT/DESCRIBE don't have explicit graphs
-            )
-            for triple in results
-        ]
-    except Exception as e:
-        raise ToolError(f"Failed to format SPARQL query results: {e}") from e
+    # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
+    return [
+        QuadResult(
+            subject=format_subject(triple.subject),
+            predicate=format_predicate(triple.predicate),
+            object=format_rdf_object(triple.object),
+            graph="default graph",  # Triples from CONSTRUCT/DESCRIBE don't have explicit graphs
+        )
+        for triple in results
+    ]
 
 
 if __name__ == "__main__":
