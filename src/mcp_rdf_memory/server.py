@@ -16,11 +16,6 @@ store = Store()
 mcp = FastMCP("RDF Memory")
 
 @mcp.tool()
-def hello_world(name: str = "World") -> str:
-    """Say hello to someone."""
-    return f"Hello, {name}! Welcome to the RDF Memory server."
-
-@mcp.tool()
 def add_triples(triples: list[dict]) -> str:
     """Add multiple RDF triples to the store in a single transaction.
     
