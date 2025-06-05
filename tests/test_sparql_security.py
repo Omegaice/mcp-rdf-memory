@@ -3,11 +3,12 @@ Tests for SPARQL security and keyword bypass attempts.
 """
 
 import pytest
+from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 
 @pytest.mark.asyncio
-async def test_sparql_case_insensitive_keywords(client):
+async def test_sparql_case_insensitive_keywords(client: Client) -> None:
     """Test that forbidden keywords are blocked regardless of case."""
     case_variations = [
         "insert data { <http://example.org/test> <http://example.org/prop> 'value' }",
@@ -30,7 +31,7 @@ async def test_sparql_case_insensitive_keywords(client):
 
 
 @pytest.mark.asyncio
-async def test_sparql_keywords_in_comments(client):
+async def test_sparql_keywords_in_comments(client: Client) -> None:
     """Test that keywords in comments should NOT be blocked."""
     # These should work - keywords are in comments, not actual operations
     comment_queries = [
@@ -47,7 +48,7 @@ async def test_sparql_keywords_in_comments(client):
 
 
 @pytest.mark.asyncio
-async def test_sparql_keywords_in_string_literals(client):
+async def test_sparql_keywords_in_string_literals(client: Client) -> None:
     """Test that keywords in string literals should NOT be blocked."""
     # Add test data first
     await client.call_tool(
@@ -83,7 +84,7 @@ async def test_sparql_keywords_in_string_literals(client):
 
 
 @pytest.mark.asyncio
-async def test_sparql_keywords_as_substrings(client):
+async def test_sparql_keywords_as_substrings(client: Client) -> None:
     """Test that keywords as substrings in valid operations should work."""
     # These contain forbidden keywords as substrings but are valid read operations
     substring_queries = [
@@ -100,7 +101,7 @@ async def test_sparql_keywords_as_substrings(client):
 
 
 @pytest.mark.asyncio
-async def test_sparql_all_forbidden_keywords(client):
+async def test_sparql_all_forbidden_keywords(client: Client) -> None:
     """Test that all forbidden keywords from FORBIDDEN_SPARQL_KEYWORDS are blocked."""
     forbidden_operations = [
         "INSERT DATA { <http://example.org/test> <http://example.org/prop> 'value' }",
@@ -124,7 +125,7 @@ async def test_sparql_all_forbidden_keywords(client):
 
 
 @pytest.mark.asyncio
-async def test_sparql_complex_valid_queries(client):
+async def test_sparql_complex_valid_queries(client: Client) -> None:
     """Test complex but valid read-only SPARQL queries."""
     # Add test data
     await client.call_tool(

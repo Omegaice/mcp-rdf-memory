@@ -3,12 +3,13 @@ Tests for the rdf_query tool.
 """
 
 import pytest
+from fastmcp import Client
 from fastmcp.exceptions import ToolError
 from mcp.types import TextContent
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_tool_available(client):
+async def test_rdf_query_tool_available(client: Client) -> None:
     """Test that rdf_query tool is available."""
     tools = await client.list_tools()
     tool_names = [tool.name for tool in tools]
@@ -16,7 +17,7 @@ async def test_rdf_query_tool_available(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_select(client):
+async def test_rdf_query_select(client: Client) -> None:
     """Test SPARQL SELECT query."""
     # First add some test data
     await client.call_tool(
@@ -49,7 +50,7 @@ async def test_rdf_query_select(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_ask(client):
+async def test_rdf_query_ask(client: Client) -> None:
     """Test SPARQL ASK query."""
     # Add test data
     await client.call_tool(
@@ -76,7 +77,7 @@ async def test_rdf_query_ask(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_construct(client):
+async def test_rdf_query_construct(client: Client) -> None:
     """Test SPARQL CONSTRUCT query."""
     # Add test data
     await client.call_tool(
@@ -110,7 +111,7 @@ async def test_rdf_query_construct(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_with_named_graph(client, sample_graph_uri):
+async def test_rdf_query_with_named_graph(client: Client, sample_graph_uri: str) -> None:
     """Test SPARQL query with named graph."""
     # Add data to named graph
     await client.call_tool(
@@ -139,14 +140,14 @@ async def test_rdf_query_with_named_graph(client, sample_graph_uri):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_invalid_syntax(client):
+async def test_rdf_query_invalid_syntax(client: Client) -> None:
     """Test that invalid SPARQL syntax raises an error."""
     with pytest.raises(ToolError):
         await client.call_tool("rdf_query", {"query": "INVALID SPARQL SYNTAX"})
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_modification_blocked(client):
+async def test_rdf_query_modification_blocked(client: Client) -> None:
     """Test that modification queries (INSERT/DELETE) are blocked."""
     # Try INSERT query
     with pytest.raises(ToolError):
@@ -160,7 +161,7 @@ async def test_rdf_query_modification_blocked(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_empty_query(client):
+async def test_rdf_query_empty_query(client: Client) -> None:
     """Test that empty SPARQL queries raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool("rdf_query", {"query": ""})
@@ -170,7 +171,7 @@ async def test_rdf_query_empty_query(client):
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_completely_invalid_syntax(client):
+async def test_rdf_query_completely_invalid_syntax(client: Client) -> None:
     """Test various completely invalid SPARQL syntax."""
     invalid_queries = [
         "INVALID SPARQL SYNTAX",

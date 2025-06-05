@@ -3,10 +3,11 @@ Tests for RDF-specific edge cases that span multiple tools.
 """
 
 import pytest
+from fastmcp import Client
 
 
 @pytest.mark.asyncio
-async def test_typed_literals(client):
+async def test_typed_literals(client: Client) -> None:
     """Test RDF typed literals like integers, dates, etc."""
     # Add typed literal
     await client.call_tool(
@@ -30,7 +31,7 @@ async def test_typed_literals(client):
 
 
 @pytest.mark.asyncio
-async def test_language_tagged_literals(client):
+async def test_language_tagged_literals(client: Client) -> None:
     """Test RDF language-tagged literals."""
     # Add language-tagged literals
     await client.call_tool(
@@ -60,7 +61,7 @@ async def test_language_tagged_literals(client):
 
 
 @pytest.mark.asyncio
-async def test_unicode_content(client):
+async def test_unicode_content(client: Client) -> None:
     """Test Unicode characters in RDF literals."""
     unicode_strings = [
         "Hello 世界",  # Mixed English/Chinese
@@ -89,7 +90,7 @@ async def test_unicode_content(client):
 
 
 @pytest.mark.asyncio
-async def test_multiline_strings(client):
+async def test_multiline_strings(client: Client) -> None:
     """Test multiline strings with quotes and escapes."""
     multiline_object = """Line 1
 Line 2 with "quotes"
@@ -115,7 +116,7 @@ Line 4 with \\ backslash"""
 
 
 @pytest.mark.asyncio
-async def test_duplicate_triples(client):
+async def test_duplicate_triples(client: Client) -> None:
     """Test adding identical triples multiple times."""
     triple_data = {
         "subject": "http://example.org/duplicate/test",
@@ -134,7 +135,7 @@ async def test_duplicate_triples(client):
 
 
 @pytest.mark.asyncio
-async def test_self_referential_triples(client):
+async def test_self_referential_triples(client: Client) -> None:
     """Test triples where subject equals object."""
     await client.call_tool(
         "add_triples",
@@ -155,7 +156,7 @@ async def test_self_referential_triples(client):
 
 
 @pytest.mark.asyncio
-async def test_circular_references(client):
+async def test_circular_references(client: Client) -> None:
     """Test circular reference patterns."""
     await client.call_tool(
         "add_triples",
@@ -184,7 +185,7 @@ async def test_circular_references(client):
 
 
 @pytest.mark.asyncio
-async def test_cross_graph_isolation(client, sample_graph_uri):
+async def test_cross_graph_isolation(client: Client, sample_graph_uri: str) -> None:
     """Test that data in different graphs is properly isolated."""
     # Add same triple to default and named graph
     triple_data = {

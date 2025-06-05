@@ -17,7 +17,7 @@ from mcp_rdf_memory.server import (
 class TestValidateRdfIdentifier:
     """Test the validate_rdf_identifier function."""
 
-    def test_valid_http_uri(self):
+    def test_valid_http_uri(self) -> None:
         """Test that valid HTTP URIs pass validation."""
         result = validate_rdf_identifier("http://example.org/test")
         assert result == "http://example.org/test"
@@ -25,7 +25,7 @@ class TestValidateRdfIdentifier:
         result = validate_rdf_identifier("https://example.org/test")
         assert result == "https://example.org/test"
 
-    def test_invalid_identifiers_raise_error(self):
+    def test_invalid_identifiers_raise_error(self) -> None:
         """Test that invalid RDF identifiers raise ValueError."""
         invalid_identifiers = [
             "",  # Empty string
@@ -37,7 +37,7 @@ class TestValidateRdfIdentifier:
             with pytest.raises(ValueError):
                 validate_rdf_identifier(identifier)
 
-    def test_valid_non_http_identifiers(self):
+    def test_valid_non_http_identifiers(self) -> None:
         """Test that non-HTTP identifiers are accepted."""
         valid_identifiers = [
             "rdf:type",
@@ -51,7 +51,7 @@ class TestValidateRdfIdentifier:
             result = validate_rdf_identifier(identifier)
             assert result == identifier  # Should return the same string
 
-    def test_namednode_input(self):
+    def test_namednode_input(self) -> None:
         """Test that NamedNode input returns its value."""
         node = NamedNode("http://example.org/test")
         result = validate_rdf_identifier(node)
@@ -61,7 +61,7 @@ class TestValidateRdfIdentifier:
 class TestCreateRdfNode:
     """Test the create_rdf_node helper function."""
 
-    def test_creates_named_node_for_uris(self):
+    def test_creates_named_node_for_uris(self) -> None:
         """Test that URIs create NamedNode instances."""
         node = create_rdf_node("http://example.org/test")
         assert isinstance(node, NamedNode)
@@ -71,7 +71,7 @@ class TestCreateRdfNode:
         assert isinstance(node, NamedNode)
         assert node.value == "https://example.org/test"
 
-    def test_creates_literal_for_non_identifiers(self):
+    def test_creates_literal_for_non_identifiers(self) -> None:
         """Test that values that can't be NamedNodes create Literal instances."""
         # Values that should become literals (if pyoxigraph rejects them as NamedNodes)
         potential_literals = [
@@ -86,7 +86,7 @@ class TestCreateRdfNode:
             # Should be either NamedNode or Literal, depending on pyoxigraph's validation
             assert isinstance(node, NamedNode | Literal)
 
-    def test_creates_named_node_for_valid_identifiers(self):
+    def test_creates_named_node_for_valid_identifiers(self) -> None:
         """Test that valid RDF identifiers create NamedNode instances."""
         valid_identifiers = [
             "http://example.org/test",
@@ -103,13 +103,13 @@ class TestCreateRdfNode:
 class TestFormatRdfObject:
     """Test the format_rdf_object helper function."""
 
-    def test_format_named_node(self):
+    def test_format_named_node(self) -> None:
         """Test formatting NamedNode objects."""
         node = NamedNode("http://example.org/test")
         result = format_rdf_object(node)
         assert result == "<http://example.org/test>"
 
-    def test_format_literal(self):
+    def test_format_literal(self) -> None:
         """Test formatting Literal objects."""
         node = Literal("test value")
         result = format_rdf_object(node)
@@ -120,13 +120,13 @@ class TestFormatRdfObject:
         result = format_rdf_object(node)
         assert result == '"value with "quotes""'
 
-    def test_format_blank_node(self):
+    def test_format_blank_node(self) -> None:
         """Test formatting BlankNode objects."""
         node = BlankNode("b1")
         result = format_rdf_object(node)
         assert result == "_:b1"
 
-    def test_format_triple(self):
+    def test_format_triple(self) -> None:
         """Test formatting Triple objects (quoted triples)."""
         # Create a triple
         subject = NamedNode("http://example.org/subject")
@@ -143,19 +143,19 @@ class TestFormatRdfObject:
 class TestFormatSubject:
     """Test the format_subject helper function."""
 
-    def test_format_named_node_subject(self):
+    def test_format_named_node_subject(self) -> None:
         """Test formatting NamedNode subjects."""
         node = NamedNode("http://example.org/subject")
         result = format_subject(node)
         assert result == "<http://example.org/subject>"
 
-    def test_format_blank_node_subject(self):
+    def test_format_blank_node_subject(self) -> None:
         """Test formatting BlankNode subjects."""
         node = BlankNode("subj1")
         result = format_subject(node)
         assert result == "_:subj1"
 
-    def test_format_triple_subject(self):
+    def test_format_triple_subject(self) -> None:
         """Test formatting Triple subjects (quoted triple subjects)."""
         subject = NamedNode("http://example.org/inner")
         predicate = NamedNode("http://example.org/pred")
@@ -171,13 +171,13 @@ class TestFormatSubject:
 class TestFormatPredicate:
     """Test the format_predicate helper function."""
 
-    def test_format_named_node_predicate(self):
+    def test_format_named_node_predicate(self) -> None:
         """Test formatting NamedNode predicates."""
         node = NamedNode("http://schema.org/name")
         result = format_predicate(node)
         assert result == "<http://schema.org/name>"
 
-    def test_format_blank_node_predicate(self):
+    def test_format_blank_node_predicate(self) -> None:
         """Test formatting BlankNode predicates."""
         node = BlankNode("pred1")
         result = format_predicate(node)
@@ -187,7 +187,7 @@ class TestFormatPredicate:
 class TestHelperFunctionEdgeCases:
     """Test edge cases for helper functions."""
 
-    def test_empty_values(self):
+    def test_empty_values(self) -> None:
         """Test helper functions with empty values."""
         # Empty URI should create empty literal
         node = create_rdf_node("")
@@ -199,7 +199,7 @@ class TestHelperFunctionEdgeCases:
         result = format_rdf_object(empty_literal)
         assert result == '""'
 
-    def test_special_characters_in_uris(self):
+    def test_special_characters_in_uris(self) -> None:
         """Test URIs with special characters."""
         # URI with fragment
         node = create_rdf_node("http://example.org/test#fragment")
@@ -215,7 +215,7 @@ class TestHelperFunctionEdgeCases:
         result = format_rdf_object(node)
         assert result == "<http://example.org/test?param=value>"
 
-    def test_unicode_in_literals(self):
+    def test_unicode_in_literals(self) -> None:
         """Test Unicode characters in literals."""
         unicode_text = "Hello 世界 🌍"
         node = create_rdf_node(unicode_text)
@@ -224,7 +224,7 @@ class TestHelperFunctionEdgeCases:
         result = format_rdf_object(node)
         assert result == f'"{unicode_text}"'
 
-    def test_very_long_values(self):
+    def test_very_long_values(self) -> None:
         """Test very long URI and literal values."""
         long_uri = "http://example.org/" + "a" * 1000
         node = create_rdf_node(long_uri)

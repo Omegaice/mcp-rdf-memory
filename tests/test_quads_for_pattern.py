@@ -5,6 +5,7 @@ Tests for the quads_for_pattern tool.
 import json
 
 import pytest
+from fastmcp import Client
 from fastmcp.exceptions import ToolError
 from mcp.types import TextContent
 
@@ -12,7 +13,7 @@ from mcp_rdf_memory.server import QuadResult
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_tool_available(client):
+async def test_quads_for_pattern_tool_available(client: Client) -> None:
     """Test that quads_for_pattern tool is available."""
     tools = await client.list_tools()
     tool_names = [tool.name for tool in tools]
@@ -20,7 +21,7 @@ async def test_quads_for_pattern_tool_available(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_find_by_subject(client):
+async def test_quads_for_pattern_find_by_subject(client: Client) -> None:
     """Test finding quads by subject pattern."""
     # First add a triple
     await client.call_tool(
@@ -54,7 +55,7 @@ async def test_quads_for_pattern_find_by_subject(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_find_by_predicate(client):
+async def test_quads_for_pattern_find_by_predicate(client: Client) -> None:
     """Test finding quads by predicate pattern."""
     # Add multiple triples with same predicate
     await client.call_tool(
@@ -85,7 +86,7 @@ async def test_quads_for_pattern_find_by_predicate(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_with_named_graph(client, sample_graph_uri):
+async def test_quads_for_pattern_with_named_graph(client: Client, sample_graph_uri: str) -> None:
     """Test finding quads in a specific named graph."""
     # Add triple to specific graph
     await client.call_tool(
@@ -112,7 +113,7 @@ async def test_quads_for_pattern_with_named_graph(client, sample_graph_uri):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_wildcard_search(client):
+async def test_quads_for_pattern_wildcard_search(client: Client) -> None:
     """Test finding all quads with wildcard pattern."""
     # Add a test triple
     await client.call_tool(
@@ -134,7 +135,7 @@ async def test_quads_for_pattern_wildcard_search(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_no_matches(client):
+async def test_quads_for_pattern_no_matches(client: Client) -> None:
     """Test pattern that matches no quads."""
     # Search for non-existent subject
     result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/nonexistent"})
@@ -144,7 +145,7 @@ async def test_quads_for_pattern_no_matches(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_invalid_identifiers(client):
+async def test_quads_for_pattern_invalid_identifiers(client: Client) -> None:
     """Test that invalid identifiers in pattern queries raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool("quads_for_pattern", {"subject": ""})  # Empty string
@@ -154,7 +155,7 @@ async def test_quads_for_pattern_invalid_identifiers(client):
 
 
 @pytest.mark.asyncio
-async def test_quads_for_pattern_all_none(client):
+async def test_quads_for_pattern_all_none(client: Client) -> None:
     """Test pattern query with all None values (wildcard)."""
     result = await client.call_tool("quads_for_pattern", {})
     # Should not raise error, may return empty or existing data

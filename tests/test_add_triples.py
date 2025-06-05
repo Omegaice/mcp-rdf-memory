@@ -3,11 +3,12 @@ Tests for the add_triples tool.
 """
 
 import pytest
+from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
 
 @pytest.mark.asyncio
-async def test_add_triples_tool_available(client):
+async def test_add_triples_tool_available(client: Client) -> None:
     """Test that add_triples tool is available."""
     tools = await client.list_tools()
     tool_names = [tool.name for tool in tools]
@@ -15,7 +16,7 @@ async def test_add_triples_tool_available(client):
 
 
 @pytest.mark.asyncio
-async def test_add_simple_triple(client):
+async def test_add_simple_triple(client: Client) -> None:
     """Test adding a basic RDF triple."""
     result = await client.call_tool(
         "add_triples",
@@ -35,7 +36,7 @@ async def test_add_simple_triple(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triple_with_named_graph(client, sample_graph_uri):
+async def test_add_triple_with_named_graph(client: Client, sample_graph_uri: str) -> None:
     """Test adding a triple to a specific named graph context."""
     result = await client.call_tool(
         "add_triples",
@@ -56,7 +57,7 @@ async def test_add_triple_with_named_graph(client, sample_graph_uri):
 
 
 @pytest.mark.asyncio
-async def test_add_triple_with_uri_object(client):
+async def test_add_triple_with_uri_object(client: Client) -> None:
     """Test adding a triple where the object is also a URI."""
     result = await client.call_tool(
         "add_triples",
@@ -76,7 +77,7 @@ async def test_add_triple_with_uri_object(client):
 
 
 @pytest.mark.asyncio
-async def test_add_multiple_triples(client):
+async def test_add_multiple_triples(client: Client) -> None:
     """Test adding multiple triples in a single call."""
     result = await client.call_tool(
         "add_triples",
@@ -106,7 +107,7 @@ async def test_add_multiple_triples(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triple_validation_error(client):
+async def test_add_triple_validation_error(client: Client) -> None:
     """Test that invalid URIs are properly validated."""
     with pytest.raises(ToolError):  # Should raise ToolError via FastMCP
         await client.call_tool(
@@ -116,7 +117,7 @@ async def test_add_triple_validation_error(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triples_invalid_identifiers(client):
+async def test_add_triples_invalid_identifiers(client: Client) -> None:
     """Test that truly invalid RDF identifiers raise appropriate errors."""
     invalid_identifiers = [
         "",  # Empty string
@@ -141,7 +142,7 @@ async def test_add_triples_invalid_identifiers(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triples_valid_curie_and_urn(client):
+async def test_add_triples_valid_curie_and_urn(client: Client) -> None:
     """Test that CURIEs and URNs are accepted as valid identifiers."""
     valid_identifiers = [
         "rdf:type",
@@ -171,14 +172,14 @@ async def test_add_triples_valid_curie_and_urn(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triples_empty_list(client):
+async def test_add_triples_empty_list(client: Client) -> None:
     """Test that empty triple list is handled gracefully."""
     result = await client.call_tool("add_triples", {"triples": []})
     assert len(result) == 0
 
 
 @pytest.mark.asyncio
-async def test_add_triples_missing_fields(client):
+async def test_add_triples_missing_fields(client: Client) -> None:
     """Test that missing required fields raise validation errors."""
     # Missing subject
     with pytest.raises((ToolError, ValueError)):
@@ -210,7 +211,7 @@ async def test_add_triples_missing_fields(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triples_invalid_graph_uri(client):
+async def test_add_triples_invalid_graph_uri(client: Client) -> None:
     """Test that invalid graph URIs raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool(
@@ -229,7 +230,7 @@ async def test_add_triples_invalid_graph_uri(client):
 
 
 @pytest.mark.asyncio
-async def test_add_triples_invalid_predicate(client):
+async def test_add_triples_invalid_predicate(client: Client) -> None:
     """Test that invalid predicates raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool(

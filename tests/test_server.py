@@ -3,10 +3,11 @@ General server tests - basic functionality and integration.
 """
 
 import pytest
+from fastmcp import Client
 
 
 @pytest.mark.asyncio
-async def test_server_tools_available(client):
+async def test_server_tools_available(client: Client) -> None:
     """Test that the server has the expected tools."""
     tools = await client.list_tools()
     tool_names = [tool.name for tool in tools]
@@ -18,7 +19,7 @@ async def test_server_tools_available(client):
 
 
 @pytest.mark.asyncio
-async def test_server_info(client):
+async def test_server_info(client: Client) -> None:
     """Test server basic info."""
     # Verify server is responding
     tools = await client.list_tools()

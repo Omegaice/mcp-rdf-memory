@@ -5,13 +5,14 @@ Comprehensive integration tests spanning multiple tools and workflows.
 import json
 
 import pytest
+from fastmcp import Client
 from mcp.types import TextContent
 
 from mcp_rdf_memory.server import QuadResult
 
 
 @pytest.mark.asyncio
-async def test_complete_workflow_default_graph(client):
+async def test_complete_workflow_default_graph(client: Client) -> None:
     """Test complete workflow: add data → query → pattern match → verify."""
     # Step 1: Add structured data
     await client.call_tool(
@@ -56,20 +57,24 @@ async def test_complete_workflow_default_graph(client):
     assert isinstance(name_pattern_result[0], TextContent)
 
     # Parse and verify pattern results
-    quads_data = json.loads(name_pattern_result[0].text)
+    content = name_pattern_result[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     quads = [QuadResult(**quad) for quad in quads_data]
     assert len(quads) >= 2  # Should have both people
 
     # Step 4: Verify specific relationships
     knows_result = await client.call_tool("quads_for_pattern", {"predicate": "http://xmlns.com/foaf/0.1/knows"})
     assert len(knows_result) == 1
-    quads_data = json.loads(knows_result[0].text)
+    content = knows_result[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     knows_quads = [QuadResult(**quad) for quad in quads_data]
     assert len(knows_quads) >= 1
 
 
 @pytest.mark.asyncio
-async def test_mixed_graph_operations(client, sample_graph_uri):
+async def test_mixed_graph_operations(client: Client, sample_graph_uri: str) -> None:
     """Test operations across multiple named graphs."""
     # Add data to different graphs
     default_triple = {
@@ -92,7 +97,9 @@ async def test_mixed_graph_operations(client, sample_graph_uri):
     # Query all graphs (should see both)
     all_contexts = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/mixed/shared"})
     assert len(all_contexts) == 1
-    quads_data = json.loads(all_contexts[0].text)
+    content = all_contexts[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     all_quads = [QuadResult(**quad) for quad in quads_data]
     assert len(all_quads) >= 2
 
@@ -101,14 +108,16 @@ async def test_mixed_graph_operations(client, sample_graph_uri):
         "quads_for_pattern", {"subject": "http://example.org/mixed/shared", "graph": sample_graph_uri}
     )
     assert len(named_only) == 1
-    quads_data = json.loads(named_only[0].text)
+    content = named_only[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     named_quads = [QuadResult(**quad) for quad in quads_data]
     assert len(named_quads) == 1
     assert sample_graph_uri in named_quads[0].graph
 
 
 @pytest.mark.asyncio
-async def test_query_result_consistency(client):
+async def test_query_result_consistency(client: Client) -> None:
     """Test that same data is accessible through different query methods."""
     # Add test data
     test_subject = "http://example.org/consistency/test"
@@ -148,13 +157,15 @@ async def test_query_result_consistency(client):
     assert any(test_object in str(binding) for binding in sparql_data)
 
     # Pattern queries should have formatted results
-    subject_quads_data = json.loads(pattern_by_subject[0].text)
+    content = pattern_by_subject[0]
+    assert isinstance(content, TextContent)
+    subject_quads_data = json.loads(content.text)
     subject_quads = [QuadResult(**quad) for quad in subject_quads_data]
     assert any(test_object in quad.object for quad in subject_quads)
 
 
 @pytest.mark.asyncio
-async def test_sparql_construct_to_pattern_roundtrip(client):
+async def test_sparql_construct_to_pattern_roundtrip(client: Client) -> None:
     """Test CONSTRUCT query results can be found via pattern matching."""
     # Add source data
     await client.call_tool(
@@ -202,7 +213,7 @@ async def test_sparql_construct_to_pattern_roundtrip(client):
 
 
 @pytest.mark.asyncio
-async def test_error_recovery_workflow(client):
+async def test_error_recovery_workflow(client: Client) -> None:
     """Test that errors in one operation don't affect subsequent operations."""
     # Start with valid operation
     await client.call_tool(
@@ -249,7 +260,9 @@ async def test_error_recovery_workflow(client):
     # Verify both valid operations succeeded
     all_recovery = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
     assert len(all_recovery) == 1
-    quads_data = json.loads(all_recovery[0].text)
+    content = all_recovery[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     recovery_quads = [QuadResult(**quad) for quad in quads_data]
     recovery_subjects = [quad.subject for quad in recovery_quads]
 
@@ -258,7 +271,7 @@ async def test_error_recovery_workflow(client):
 
 
 @pytest.mark.asyncio
-async def test_batch_operations_consistency(client):
+async def test_batch_operations_consistency(client: Client) -> None:
     """Test that batch operations maintain data consistency."""
     # Large batch add
     batch_triples = []
@@ -288,7 +301,9 @@ async def test_batch_operations_consistency(client):
     # Pattern query should find all subjects
     all_batch_people = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
     assert len(all_batch_people) == 1
-    quads_data = json.loads(all_batch_people[0].text)
+    content = all_batch_people[0]
+    assert isinstance(content, TextContent)
+    quads_data = json.loads(content.text)
     name_quads = [QuadResult(**quad) for quad in quads_data]
 
     # Should have at least 50 name triples from this batch
