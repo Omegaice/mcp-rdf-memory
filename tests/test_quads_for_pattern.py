@@ -2,8 +2,12 @@
 Tests for the quads_for_pattern tool.
 """
 
+import json
+
 import pytest
 from mcp.types import TextContent
+
+from mcp_rdf_memory.server import QuadResult
 
 
 @pytest.mark.asyncio
@@ -36,8 +40,16 @@ async def test_quads_for_pattern_find_by_subject(client):
 
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
-    assert "Bob Smith" in result[0].text
-    assert "http://schema.org/name" in result[0].text
+
+    # Parse JSON response into Pydantic models
+    quads_data = json.loads(result[0].text)
+    quads = [QuadResult(**quad) for quad in quads_data]
+
+    assert len(quads) == 1
+    assert quads[0].subject == "<http://example.org/person/bob>"
+    assert quads[0].predicate == "<http://schema.org/name>"
+    assert '"Bob Smith"' in quads[0].object
+    assert quads[0].graph == "default graph"
 
 
 @pytest.mark.asyncio
@@ -126,6 +138,5 @@ async def test_quads_for_pattern_no_matches(client):
     # Search for non-existent subject
     result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/nonexistent"})
 
-    assert len(result) == 1
-    assert isinstance(result[0], TextContent)
-    assert "no quads found" in result[0].text.lower() or result[0].text.strip() == ""
+    # No matches returns empty list
+    assert len(result) == 0

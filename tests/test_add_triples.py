@@ -4,7 +4,6 @@ Tests for the add_triples tool.
 
 import pytest
 from fastmcp.exceptions import ToolError
-from mcp.types import TextContent
 
 
 @pytest.mark.asyncio
@@ -31,9 +30,8 @@ async def test_add_simple_triple(client):
         },
     )
 
-    assert len(result) == 1
-    assert isinstance(result[0], TextContent)
-    assert "success" in result[0].text.lower()
+    # Success is indicated by no exception and empty result
+    assert len(result) == 0
 
 
 @pytest.mark.asyncio
@@ -53,9 +51,8 @@ async def test_add_triple_with_named_graph(client, sample_graph_uri):
         },
     )
 
-    assert len(result) == 1
-    assert isinstance(result[0], TextContent)
-    assert "success" in result[0].text.lower()
+    # Success is indicated by no exception and empty result
+    assert len(result) == 0
 
 
 @pytest.mark.asyncio
@@ -74,9 +71,8 @@ async def test_add_triple_with_uri_object(client):
         },
     )
 
-    assert len(result) == 1
-    assert isinstance(result[0], TextContent)
-    assert "success" in result[0].text.lower()
+    # Success is indicated by no exception and empty result
+    assert len(result) == 0
 
 
 @pytest.mark.asyncio
@@ -105,10 +101,8 @@ async def test_add_multiple_triples(client):
         },
     )
 
-    assert len(result) == 1
-    assert isinstance(result[0], TextContent)
-    assert "success" in result[0].text.lower()
-    assert "3 triple(s)" in result[0].text
+    # Success is indicated by no exception and empty result
+    assert len(result) == 0
 
 
 @pytest.mark.asyncio
