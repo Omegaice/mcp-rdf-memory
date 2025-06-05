@@ -122,3 +122,119 @@ async def test_add_triple_validation_error():
                 "predicate": "http://schema.org/name", 
                 "object": "John Doe"
             })
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_tool_available():
+    """Test that quads_for_pattern tool is available."""
+    async with Client(mcp) as client:
+        tools = await client.list_tools()
+        tool_names = [tool.name for tool in tools]
+        assert "quads_for_pattern" in tool_names
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_find_by_subject():
+    """Test finding quads by subject pattern."""
+    async with Client(mcp) as client:
+        # First add a triple
+        await client.call_tool("add_triple", {
+            "subject": "http://example.org/person/bob",
+            "predicate": "http://schema.org/name",
+            "object": "Bob Smith"
+        })
+        
+        # Find quads with specific subject
+        result = await client.call_tool("quads_for_pattern", {
+            "subject": "http://example.org/person/bob"
+        })
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        assert "Bob Smith" in result[0].text
+        assert "http://schema.org/name" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_find_by_predicate():
+    """Test finding quads by predicate pattern."""
+    async with Client(mcp) as client:
+        # Add multiple triples with same predicate
+        await client.call_tool("add_triple", {
+            "subject": "http://example.org/person/charlie",
+            "predicate": "http://schema.org/email",
+            "object": "charlie@example.com"
+        })
+        await client.call_tool("add_triple", {
+            "subject": "http://example.org/person/diana",
+            "predicate": "http://schema.org/email", 
+            "object": "diana@example.com"
+        })
+        
+        # Find all email triples
+        result = await client.call_tool("quads_for_pattern", {
+            "predicate": "http://schema.org/email"
+        })
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        assert "charlie@example.com" in result[0].text
+        assert "diana@example.com" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_with_named_graph():
+    """Test finding quads in a specific named graph."""
+    async with Client(mcp) as client:
+        # Add triple to specific graph
+        graph_uri = "http://mcp.local/conversation/test-123"
+        await client.call_tool("add_triple", {
+            "subject": "http://example.org/person/eve",
+            "predicate": "http://schema.org/name",
+            "object": "Eve Johnson",
+            "graph": graph_uri
+        })
+        
+        # Find quads in specific graph
+        result = await client.call_tool("quads_for_pattern", {
+            "graph": graph_uri
+        })
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        assert "Eve Johnson" in result[0].text
+        assert graph_uri in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_wildcard_search():
+    """Test finding all quads with wildcard pattern."""
+    async with Client(mcp) as client:
+        # Add a test triple
+        await client.call_tool("add_triple", {
+            "subject": "http://example.org/person/frank",
+            "predicate": "http://schema.org/age",
+            "object": "30"
+        })
+        
+        # Find all quads (no pattern specified)
+        result = await client.call_tool("quads_for_pattern", {})
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        # Should contain multiple results from previous tests
+        assert "frank" in result[0].text.lower()
+
+
+@pytest.mark.asyncio
+async def test_quads_for_pattern_no_matches():
+    """Test pattern that matches no quads."""
+    async with Client(mcp) as client:
+        # Search for non-existent subject
+        result = await client.call_tool("quads_for_pattern", {
+            "subject": "http://example.org/person/nonexistent"
+        })
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        assert "no quads found" in result[0].text.lower() or result[0].text.strip() == ""

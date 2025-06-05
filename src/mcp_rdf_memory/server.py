@@ -54,5 +54,66 @@ def add_triple(subject: str, predicate: str, object: str, graph: str | None = No
     except Exception as e:
         raise ToolError(f"Failed to add triple: {e}") from e
 
+
+@mcp.tool()
+def quads_for_pattern(
+    subject: str | None = None, 
+    predicate: str | None = None, 
+    object: str | None = None, 
+    graph: str | None = None
+) -> str:
+    """Find quads matching the given pattern. Use None (omit parameter) for wildcards."""
+    try:
+        # Convert string parameters to RDF nodes or None for wildcards
+        subject_node = NamedNode(subject) if subject else None
+        predicate_node = NamedNode(predicate) if predicate else None
+        
+        # Handle object - could be URI or literal
+        object_node = None
+        if object:
+            object_node = NamedNode(object) if object.startswith(("http://", "https://")) else Literal(object)
+        
+        graph_node = NamedNode(graph) if graph else None
+        
+        # Query the store for matching quads
+        quads = list(store.quads_for_pattern(subject_node, predicate_node, object_node, graph_node))
+        
+        if not quads:
+            return "No quads found matching the pattern."
+        
+        # Format results
+        results = []
+        for quad in quads:
+            # Assert correct types for IDE diagnostics
+            assert isinstance(quad.subject, NamedNode), f"Expected NamedNode for subject, got {type(quad.subject)}"
+            assert isinstance(quad.predicate, NamedNode), f"Expected NamedNode for predicate, got {type(quad.predicate)}"
+            
+            subject_str = f"<{quad.subject.value}>"
+            predicate_str = f"<{quad.predicate.value}>"
+            
+            # Format object based on type
+            if hasattr(quad.object, 'value'):
+                # Object can be NamedNode or Literal, both have .value
+                assert isinstance(quad.object, NamedNode | Literal), f"Expected NamedNode or Literal for object, got {type(quad.object)}"
+                object_str = f"<{quad.object.value}>" if str(quad.object).startswith('<') else f'"{quad.object.value}"'
+            else:
+                object_str = str(quad.object)
+            
+            # Include graph if present
+            if quad.graph_name and hasattr(quad.graph_name, 'value'):
+                # Graph should be NamedNode when it has a value
+                assert isinstance(quad.graph_name, NamedNode), f"Expected NamedNode for named graph, got {type(quad.graph_name)}"
+                graph_str = f" GRAPH <{quad.graph_name.value}>"
+                results.append(f"{subject_str} {predicate_str} {object_str}{graph_str}")
+            else:
+                results.append(f"{subject_str} {predicate_str} {object_str}")
+        
+        return f"Found {len(quads)} quad(s):\n" + "\n".join(results)
+        
+    except ValueError as e:
+        raise ToolError(f"Invalid URI format: {e}") from e
+    except Exception as e:
+        raise ToolError(f"Failed to query quads: {e}") from e
+
 if __name__ == "__main__":
     mcp.run()
