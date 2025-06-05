@@ -5,6 +5,7 @@ Model Context Protocol server providing RDF triple store capabilities to LLMs th
 """
 
 
+
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pyoxigraph import Literal, NamedNode, Quad, Store
@@ -151,6 +152,94 @@ def quads_for_pattern(
         raise ToolError(f"Invalid URI format: {e}") from e
     except Exception as e:
         raise ToolError(f"Failed to query quads: {e}") from e
+
+
+@mcp.tool()
+def rdf_query(query: str) -> str:
+    """Execute a read-only SPARQL query against the RDF store.
+    
+    Supports SELECT, ASK, CONSTRUCT, and DESCRIBE queries.
+    Modification queries (INSERT, DELETE, DROP, CLEAR) are not allowed.
+    """
+    try:
+        # Validate query is read-only
+        query_upper = query.upper()
+        forbidden_keywords = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
+        
+        for keyword in forbidden_keywords:
+            if keyword in query_upper:
+                raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
+        
+        # Execute the SPARQL query
+        results = store.query(query)
+        
+        # Format results based on query type - use runtime type checks
+        # Import types for isinstance checks
+        from pyoxigraph import QueryBoolean, QuerySolutions, QueryTriples
+        
+        if isinstance(results, QueryBoolean):
+            # ASK query returns QueryBoolean (not iterable)
+            return f"Query result: {results}"
+        elif isinstance(results, QuerySolutions):
+            # SELECT query returns QuerySolutions (iterable)
+            bindings = list(results)
+            
+            if not bindings:
+                return "Query returned no results."
+            
+            # Format SELECT results as table-like output
+            formatted_results = []
+            for i, binding in enumerate(bindings):
+                binding_strs = []
+                # Use string representation and parse manually for now
+                binding_str = str(binding)
+                # Extract variable=value pairs from string representation
+                if "=" in binding_str:
+                    # Parse format like "?name=literal"
+                    pairs = binding_str.strip("{}").split(", ")
+                    for pair in pairs:
+                        if "=" in pair:
+                            var, val = pair.split("=", 1)
+                            binding_strs.append(f"{var}: {val}")
+                        else:
+                            binding_strs.append(pair)
+                else:
+                    # Fallback to string representation
+                    binding_strs.append(binding_str)
+                
+                formatted_results.append(f"Result {i+1}: " + ", ".join(binding_strs))
+            
+            return f"Query returned {len(bindings)} result(s):\n" + "\n".join(formatted_results)
+        
+        else:
+            # CONSTRUCT/DESCRIBE query returns QueryTriples (iterable)
+            assert isinstance(results, QueryTriples), f"Expected QueryTriples, got {type(results)}"
+            triples = list(results)
+            
+            if not triples:
+                return "Query returned no triples."
+            
+            # Format triples for output
+            formatted_triples = []
+            for triple in triples:
+                subject_str = f"<{triple.subject.value}>"
+                predicate_str = f"<{triple.predicate.value}>"
+                
+                # Format object based on type
+                if hasattr(triple.object, 'value'):
+                    object_str = f"<{triple.object.value}>" if str(triple.object).startswith('<') else f'"{triple.object.value}"'
+                else:
+                    object_str = str(triple.object)
+                
+                formatted_triples.append(f"{subject_str} {predicate_str} {object_str} .")
+            
+            return f"Query returned {len(triples)} triple(s):\n" + "\n".join(formatted_triples)
+            
+    except ValueError as e:
+        raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
+    except Exception as e:
+        raise ToolError(f"Failed to execute SPARQL query: {e}") from e
+
 
 if __name__ == "__main__":
     mcp.run()
