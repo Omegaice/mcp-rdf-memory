@@ -51,12 +51,12 @@ async def test_server_info():
 
 
 @pytest.mark.asyncio
-async def test_add_triple_tool_available():
-    """Test that add_triple tool is available."""
+async def test_add_triples_tool_available():
+    """Test that add_triples tool is available."""
     async with Client(mcp) as client:
         tools = await client.list_tools()
         tool_names = [tool.name for tool in tools]
-        assert "add_triple" in tool_names
+        assert "add_triples" in tool_names
 
 
 @pytest.mark.asyncio
@@ -64,10 +64,12 @@ async def test_add_simple_triple():
     """Test adding a basic RDF triple."""
     async with Client(mcp) as client:
         # Add a simple person-name triple
-        result = await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/john",
-            "predicate": "http://schema.org/name", 
-            "object": "John Doe"
+        result = await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/john",
+                "predicate": "http://schema.org/name", 
+                "object": "John Doe"
+            }]
         })
         
         assert len(result) == 1
@@ -83,11 +85,13 @@ async def test_add_triple_with_named_graph():
         conversation_id = "conv-123"
         graph_uri = f"http://mcp.local/conversation/{conversation_id}"
         
-        result = await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/alice",
-            "predicate": "http://schema.org/name",
-            "object": "Alice Smith",
-            "graph": graph_uri
+        result = await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/alice",
+                "predicate": "http://schema.org/name",
+                "object": "Alice Smith",
+                "graph": graph_uri
+            }]
         })
         
         assert len(result) == 1
@@ -100,10 +104,12 @@ async def test_add_triple_with_uri_object():
     """Test adding a triple where the object is also a URI."""
     async with Client(mcp) as client:
         # Add a relationship between two people
-        result = await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/john",
-            "predicate": "http://xmlns.com/foaf/0.1/knows",
-            "object": "http://example.org/person/alice"
+        result = await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/john",
+                "predicate": "http://xmlns.com/foaf/0.1/knows",
+                "object": "http://example.org/person/alice"
+            }]
         })
         
         assert len(result) == 1
@@ -112,15 +118,48 @@ async def test_add_triple_with_uri_object():
 
 
 @pytest.mark.asyncio
+async def test_add_multiple_triples():
+    """Test adding multiple triples in a single call."""
+    async with Client(mcp) as client:
+        # Add multiple triples at once
+        result = await client.call_tool("add_triples", {
+            "triples": [
+                {
+                    "subject": "http://example.org/person/multi1",
+                    "predicate": "http://schema.org/name", 
+                    "object": "Person One"
+                },
+                {
+                    "subject": "http://example.org/person/multi2",
+                    "predicate": "http://schema.org/name", 
+                    "object": "Person Two"
+                },
+                {
+                    "subject": "http://example.org/person/multi1",
+                    "predicate": "http://xmlns.com/foaf/0.1/knows", 
+                    "object": "http://example.org/person/multi2"
+                }
+            ]
+        })
+        
+        assert len(result) == 1
+        assert isinstance(result[0], TextContent)
+        assert "success" in result[0].text.lower()
+        assert "3 triple(s)" in result[0].text
+
+
+@pytest.mark.asyncio
 async def test_add_triple_validation_error():
     """Test that invalid URIs are properly validated."""
     async with Client(mcp) as client:
         # Try to add triple with invalid subject URI
         with pytest.raises(ToolError):  # Should raise ToolError via FastMCP
-            await client.call_tool("add_triple", {
-                "subject": "not-a-valid-uri",
-                "predicate": "http://schema.org/name", 
-                "object": "John Doe"
+            await client.call_tool("add_triples", {
+                "triples": [{
+                    "subject": "not-a-valid-uri",
+                    "predicate": "http://schema.org/name", 
+                    "object": "John Doe"
+                }]
             })
 
 
@@ -138,10 +177,12 @@ async def test_quads_for_pattern_find_by_subject():
     """Test finding quads by subject pattern."""
     async with Client(mcp) as client:
         # First add a triple
-        await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/bob",
-            "predicate": "http://schema.org/name",
-            "object": "Bob Smith"
+        await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/bob",
+                "predicate": "http://schema.org/name",
+                "object": "Bob Smith"
+            }]
         })
         
         # Find quads with specific subject
@@ -160,15 +201,19 @@ async def test_quads_for_pattern_find_by_predicate():
     """Test finding quads by predicate pattern."""
     async with Client(mcp) as client:
         # Add multiple triples with same predicate
-        await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/charlie",
-            "predicate": "http://schema.org/email",
-            "object": "charlie@example.com"
-        })
-        await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/diana",
-            "predicate": "http://schema.org/email", 
-            "object": "diana@example.com"
+        await client.call_tool("add_triples", {
+            "triples": [
+                {
+                    "subject": "http://example.org/person/charlie",
+                    "predicate": "http://schema.org/email",
+                    "object": "charlie@example.com"
+                },
+                {
+                    "subject": "http://example.org/person/diana",
+                    "predicate": "http://schema.org/email", 
+                    "object": "diana@example.com"
+                }
+            ]
         })
         
         # Find all email triples
@@ -188,11 +233,13 @@ async def test_quads_for_pattern_with_named_graph():
     async with Client(mcp) as client:
         # Add triple to specific graph
         graph_uri = "http://mcp.local/conversation/test-123"
-        await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/eve",
-            "predicate": "http://schema.org/name",
-            "object": "Eve Johnson",
-            "graph": graph_uri
+        await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/eve",
+                "predicate": "http://schema.org/name",
+                "object": "Eve Johnson",
+                "graph": graph_uri
+            }]
         })
         
         # Find quads in specific graph
@@ -211,10 +258,12 @@ async def test_quads_for_pattern_wildcard_search():
     """Test finding all quads with wildcard pattern."""
     async with Client(mcp) as client:
         # Add a test triple
-        await client.call_tool("add_triple", {
-            "subject": "http://example.org/person/frank",
-            "predicate": "http://schema.org/age",
-            "object": "30"
+        await client.call_tool("add_triples", {
+            "triples": [{
+                "subject": "http://example.org/person/frank",
+                "predicate": "http://schema.org/age",
+                "object": "30"
+            }]
         })
         
         # Find all quads (no pattern specified)

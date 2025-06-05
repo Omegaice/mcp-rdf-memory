@@ -20,39 +20,76 @@ def hello_world(name: str = "World") -> str:
     return f"Hello, {name}! Welcome to the RDF Memory server."
 
 @mcp.tool()
-def add_triple(subject: str, predicate: str, object: str, graph: str | None = None) -> str:
-    """Add an RDF triple to the store."""
+def add_triples(triples: list[dict]) -> str:
+    """Add multiple RDF triples to the store in a single transaction.
+    
+    Each triple should be a dictionary with keys:
+    - subject: URI string (required)
+    - predicate: URI string (required) 
+    - object: URI string or literal value (required)
+    - graph: URI string (optional)
+    """
     try:
-        # Validate and create subject URI
-        if not subject.startswith(("http://", "https://")):
-            raise ToolError("Subject must be a valid HTTP(S) URI")
-        subject_node = NamedNode(subject)
+        if not triples:
+            raise ToolError("No triples provided")
         
-        # Validate and create predicate URI
-        if not predicate.startswith(("http://", "https://")):
-            raise ToolError("Predicate must be a valid HTTP(S) URI")
-        predicate_node = NamedNode(predicate)
+        quads = []
+        for i, triple in enumerate(triples):
+            # Validate triple structure
+            if not isinstance(triple, dict):
+                raise ToolError(f"Triple {i+1} must be a dictionary")
+            
+            required_keys = {"subject", "predicate", "object"}
+            missing_keys = required_keys - set(triple.keys())
+            if missing_keys:
+                raise ToolError(f"Triple {i+1} missing required keys: {missing_keys}")
+            
+            subject = triple["subject"]
+            predicate = triple["predicate"]
+            object_value = triple["object"]
+            graph = triple.get("graph")
+            
+            # Validate and create subject URI
+            if not subject.startswith(("http://", "https://")):
+                raise ToolError(f"Triple {i+1}: Subject must be a valid HTTP(S) URI")
+            subject_node = NamedNode(subject)
+            
+            # Validate and create predicate URI
+            if not predicate.startswith(("http://", "https://")):
+                raise ToolError(f"Triple {i+1}: Predicate must be a valid HTTP(S) URI")
+            predicate_node = NamedNode(predicate)
+            
+            # Create object node - check if it's a URI or literal
+            object_node = NamedNode(object_value) if object_value.startswith(("http://", "https://")) else Literal(object_value)
+            
+            # Create graph node if specified
+            graph_node = None
+            if graph:
+                if not graph.startswith(("http://", "https://")):
+                    raise ToolError(f"Triple {i+1}: Graph must be a valid HTTP(S) URI")
+                graph_node = NamedNode(graph)
+            
+            # Create quad
+            quad = Quad(subject_node, predicate_node, object_node, graph_node)
+            quads.append(quad)
         
-        # Create object node - check if it's a URI or literal
-        object_node = NamedNode(object) if object.startswith(("http://", "https://")) else Literal(object)
+        # Add all quads in a single transaction
+        store.extend(quads)
         
-        # Create graph node if specified
-        graph_node = None
-        if graph:
-            if not graph.startswith(("http://", "https://")):
-                raise ToolError("Graph must be a valid HTTP(S) URI")
-            graph_node = NamedNode(graph)
+        # Build success message
+        graph_counts = {}
+        for quad in quads:
+            # Handle both named graphs and default graph
+            graph_name = quad.graph_name.value if hasattr(quad.graph_name, 'value') else "default graph"
+            graph_counts[graph_name] = graph_counts.get(graph_name, 0) + 1
         
-        # Create and add quad to store
-        quad = Quad(subject_node, predicate_node, object_node, graph_node)
-        store.add(quad)
-        
-        return f"Successfully added triple: <{subject}> <{predicate}> {object!r} to {'graph <' + graph + '>' if graph else 'default graph'}"
+        graph_summary = ", ".join(f"{count} to {graph}" for graph, count in graph_counts.items())
+        return f"Successfully added {len(quads)} triple(s): {graph_summary}"
         
     except ValueError as e:
         raise ToolError(f"Invalid URI format: {e}") from e
     except Exception as e:
-        raise ToolError(f"Failed to add triple: {e}") from e
+        raise ToolError(f"Failed to add triples: {e}") from e
 
 
 @mcp.tool()
