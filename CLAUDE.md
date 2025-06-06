@@ -130,6 +130,87 @@ URI_SCHEMES = ("http://", "https://")
 FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
 ```
 
+## LLM-Centric MCP Tool Design
+
+### Core Principles for LLM-Friendly APIs
+
+**Context Efficiency is Critical**: Every token in tool schemas counts. LLMs scan tool descriptions to decide relevance, so minimize verbose parameter descriptions.
+
+**Self-Documenting Parameter Names**: `graph_name` immediately suggests string input vs `graph` which could imply complex object.
+
+**Examples > Descriptions**: `Field(examples=["chat-123", "project/myapp"])` teaches usage patterns more efficiently than paragraph explanations.
+
+**Simplicity > Technical Purity**: `"chat-123"` → `"http://mcp.local/chat-123"` internally is better than requiring LLMs to construct full URIs.
+
+### Pydantic Type Strategy
+
+```python
+# ✅ Use Annotated for complex validation with real value
+RDFIdentifier = Annotated[
+    str,
+    PlainValidator(validate_rdf_identifier),
+    WithJsonSchema({"type": "string", "description": "RDF identifier"})
+]
+
+# ✅ Use simple types + helper validation for basic checks  
+graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"])
+
+def create_graph_uri(graph_name: str | None) -> NamedNode | None:
+    if graph_name is None:
+        return None
+    if not graph_name.strip():
+        raise ToolError("Graph name cannot be empty")
+    return NamedNode(f"http://mcp.local/{graph_name.strip()}")
+```
+
+**Decision Framework**: Use Annotated types when validation complexity is justified by:
+- Preventing common input errors
+- Providing meaningful validation feedback  
+- Supporting multiple input formats
+
+Use simple types when validation is just "non-empty string" or similar basic checks.
+
+### Field() Optimization for Context Efficiency
+
+```python
+# ❌ Wastes context tokens
+description="Graph name (automatically prefixed with http://mcp.local/). Use simple names like folder paths for organizing your data."
+
+# ✅ Context-efficient with guidance
+examples=["chat-123", "project/myapp"]
+
+# ✅ Self-documenting parameter name eliminates need for description
+graph_name: str | None = Field(default=None, examples=["temp", "analysis"])
+```
+
+### FastMCP Integration Insights
+
+**Auto-Generated Schemas**: FastMCP creates JSON schemas from Pydantic annotations. LLMs receive:
+- Parameter types and constraints
+- Field descriptions and examples  
+- Required vs optional status
+- Validation error details
+
+**Tool Selection**: LLMs use tool docstrings and parameter schemas to decide when to call tools. Keep docstrings focused on *what* the tool does, not *how* to use parameters.
+
+**Rich Metadata**: WithJsonSchema and Field() arguments become part of the tool interface visible to LLMs.
+
+### Graph Naming Convention
+
+**Pattern**: Simple string names get auto-namespaced
+```python
+# LLM Input: "conversation/chat-123"
+# Internal URI: "http://mcp.local/conversation/chat-123"
+
+graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"])
+```
+
+**Benefits**:
+- No URI syntax errors
+- Natural folder-like organization
+- Consistent namespace management
+- Reduced cognitive load for LLMs
+
 ## Tool Development Guidelines
 
 ### Function Structure

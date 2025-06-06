@@ -198,7 +198,7 @@ async def test_cross_graph_isolation(client: Client, sample_graph_uri: str) -> N
     await client.call_tool("add_triples", {"triples": [triple_data]})
 
     # Add to named graph
-    triple_with_graph = {**triple_data, "graph": sample_graph_uri}
+    triple_with_graph = {**triple_data, "graph_name": "conversation/test-123"}
     await client.call_tool("add_triples", {"triples": [triple_with_graph]})
 
     # Query default graph only
@@ -206,7 +206,7 @@ async def test_cross_graph_isolation(client: Client, sample_graph_uri: str) -> N
 
     # Query named graph only
     named_result = await client.call_tool(
-        "quads_for_pattern", {"subject": "http://example.org/isolation/test", "graph": sample_graph_uri}
+        "quads_for_pattern", {"subject": "http://example.org/isolation/test", "graph_name": "conversation/test-123"}
     )
 
     # Should have data in both but separately

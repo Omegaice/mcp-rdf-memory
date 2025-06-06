@@ -122,7 +122,7 @@ async def test_rdf_query_with_named_graph(client: Client, sample_graph_uri: str)
                     "subject": "http://example.org/person/graph_test",
                     "predicate": "http://schema.org/name",
                     "object": "Graph Test Person",
-                    "graph": sample_graph_uri,
+                    "graph_name": "conversation/test-123",
                 }
             ]
         },

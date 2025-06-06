@@ -46,7 +46,7 @@ async def test_add_triple_with_named_graph(client: Client, sample_graph_uri: str
                     "subject": "http://example.org/person/alice",
                     "predicate": "http://schema.org/name",
                     "object": "Alice Smith",
-                    "graph": sample_graph_uri,
+                    "graph_name": "conversation/test-123",
                 }
             ]
         },
@@ -222,7 +222,7 @@ async def test_add_triples_invalid_graph_uri(client: Client) -> None:
                         "subject": "http://example.org/test",
                         "predicate": "http://schema.org/name",
                         "object": "Test",
-                        "graph": "",  # Empty graph URI
+                        "graph_name": "",  # Empty graph URI
                     }
                 ]
             },

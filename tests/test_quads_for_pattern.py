@@ -47,7 +47,7 @@ async def test_quads_for_pattern_find_by_subject(client: Client) -> None:
     quads_data = json.loads(result[0].text)
     assert isinstance(quads_data, list)
     assert all(isinstance(item, dict) for item in quads_data)
-    
+
     # Validate required fields exist in JSON
     for item in quads_data:
         assert "subject" in item
@@ -58,7 +58,7 @@ async def test_quads_for_pattern_find_by_subject(client: Client) -> None:
         assert isinstance(item["predicate"], str)
         assert isinstance(item["object"], str)
         assert isinstance(item["graph"], str)
-    
+
     # Then reconstruct and verify content
     quads = [QuadResult(**quad) for quad in quads_data]
     assert len(quads) == 1
@@ -95,18 +95,18 @@ async def test_quads_for_pattern_find_by_predicate(client: Client) -> None:
 
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
-    
+
     # Validate JSON structure
     quads_data = json.loads(result[0].text)
     assert isinstance(quads_data, list)
     assert len(quads_data) >= 2  # Should have both email triples
     assert all(isinstance(item, dict) for item in quads_data)
-    
+
     # Validate schema
     for item in quads_data:
         assert all(field in item for field in ["subject", "predicate", "object", "graph"])
         assert all(isinstance(item[field], str) for field in ["subject", "predicate", "object", "graph"])
-    
+
     # Verify content exists in raw text
     assert "charlie@example.com" in result[0].text
     assert "diana@example.com" in result[0].text
@@ -124,14 +124,14 @@ async def test_quads_for_pattern_with_named_graph(client: Client, sample_graph_u
                     "subject": "http://example.org/person/eve",
                     "predicate": "http://schema.org/name",
                     "object": "Eve Johnson",
-                    "graph": sample_graph_uri,
+                    "graph_name": "conversation/test-123",
                 }
             ]
         },
     )
 
     # Find quads in specific graph
-    result = await client.call_tool("quads_for_pattern", {"graph": sample_graph_uri})
+    result = await client.call_tool("quads_for_pattern", {"graph_name": "conversation/test-123"})
 
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
@@ -198,27 +198,27 @@ async def test_quads_for_pattern_unicode_data(client: Client) -> None:
     unicode_data = {
         "subject": "http://example.org/unicode/测试",
         "predicate": "http://schema.org/name",
-        "object": "Unicode Name: 世界 🌍 àáâãäå"
+        "object": "Unicode Name: 世界 🌍 àáâãäå",
     }
-    
+
     await client.call_tool("add_triples", {"triples": [unicode_data]})
-    
+
     # Find by Unicode subject
     result = await client.call_tool("quads_for_pattern", {"subject": unicode_data["subject"]})
-    
+
     assert len(result) == 1
     content = result[0]
     assert isinstance(content, TextContent)
-    
+
     # Validate JSON structure
     quads_data = json.loads(content.text)
     assert isinstance(quads_data, list)
     assert len(quads_data) == 1
-    
+
     quad = quads_data[0]
     assert isinstance(quad, dict)
     assert all(field in quad for field in ["subject", "predicate", "object", "graph"])
-    
+
     # Verify Unicode preservation
     assert unicode_data["subject"] in quad["subject"]
     assert "世界" in quad["object"]

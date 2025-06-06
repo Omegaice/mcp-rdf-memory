@@ -78,6 +78,15 @@ def create_rdf_node(value: str) -> NamedNode | Literal:
         return Literal(value)  # Fall back to literal
 
 
+def create_graph_uri(graph_name: str | None) -> NamedNode | None:
+    """Convert simple graph name to namespaced URI."""
+    if graph_name is None:
+        return None
+    if not graph_name.strip():
+        raise ToolError("Graph name cannot be empty")
+    return NamedNode(f"http://mcp.local/{graph_name.strip()}")
+
+
 # Pydantic validated types with JSON schema support
 RDFIdentifier = Annotated[
     str,
@@ -148,7 +157,7 @@ class TripleModel(BaseModel):
     subject: RDFIdentifier = Field(description="RDF identifier for the subject")
     predicate: RDFIdentifier = Field(description="RDF identifier for the predicate")
     object: RDFNode = Field(description="RDF node (identifier or literal) for the object")
-    graph: RDFIdentifier | None = Field(default=None, description="Optional RDF identifier for the named graph")
+    graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"])
 
 
 class QuadResult(BaseModel):
@@ -169,7 +178,7 @@ def add_triples(triples: list[TripleModel]) -> None:
         subject_node = create_rdf_identifier(triple.subject)
         predicate_node = create_rdf_identifier(triple.predicate)
         object_node = create_rdf_node(triple.object)
-        graph_node = create_rdf_identifier(triple.graph) if triple.graph else None
+        graph_node = create_graph_uri(triple.graph_name)
 
         quad = Quad(subject_node, predicate_node, object_node, graph_node)
         quads.append(quad)
@@ -186,14 +195,14 @@ def quads_for_pattern(
     subject: RDFIdentifier | None = None,
     predicate: RDFIdentifier | None = None,
     object: RDFNode | None = None,
-    graph: RDFIdentifier | None = None,
+    graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"]),
 ) -> list[QuadResult]:
     """Find quads matching the given pattern. Use None for wildcards."""
     # Convert validated strings to RDF objects for pattern matching
     subject_node = create_rdf_identifier(subject) if subject else None
     predicate_node = create_rdf_identifier(predicate) if predicate else None
     object_node = create_rdf_node(object) if object else None
-    graph_node = create_rdf_identifier(graph) if graph else None
+    graph_node = create_graph_uri(graph_name)
 
     # Query the store for matching quads
     try:
