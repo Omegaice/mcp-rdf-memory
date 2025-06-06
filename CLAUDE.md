@@ -244,11 +244,15 @@ def tool_name(params: TypedModel) -> str:
 
 ## Testing Best Practices
 
-### Core Testing Principles
+**🚨 MANDATORY: Before modifying any file in tests/, read `docs/project/testing-guidelines.md` first.**
 
-**Test the Contract, Not Implementation**: MCP tools have JSON input/output contracts. Test that data survives the full pipeline correctly without making assumptions about internal representations.
+### Critical Testing Rules
 
-**Use Native Python Data Structures**: Always test with raw `dict` objects, not Pydantic models. This ensures we're testing real-world usage patterns and input validation.
+**NEVER Modify Tests to Accommodate Bugs**: Tests should NEVER be updated to make failing tests pass due to application bugs. Only modify tests when: the test is incorrect OR requirements legitimately changed.
+
+**Test Realism Check**: Before writing any test ask: "Can LLMs actually call this tool with this input in production?"
+
+**Use Native Dict Inputs**: Always test with raw `dict` objects, never Pydantic models. This ensures we're testing real MCP input validation.
 
 ### Input Validation Testing
 
