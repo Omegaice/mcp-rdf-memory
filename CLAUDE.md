@@ -1,12 +1,36 @@
 # MCP RDF Memory Server
 
+## Context Management Strategy
+
+**This file is ALWAYS in Claude's context** - every token matters for efficiency.
+
+**Inline Here (High-frequency decisions):**
+- Essential commands and patterns used constantly  
+- Core error handling and validation patterns
+- LLM-centric design principles (unique to this project)
+- Critical analysis and framework behavior reminders
+
+**External Documentation (Detailed guidance):**
+- Comprehensive testing patterns → `docs/project/testing-guidelines.md`
+- Framework-specific details → Use context7 for FastMCP/pyoxigraph/pydantic docs
+
+**Context Efficiency Principle**: Optimize for rapid decision-making, not comprehensive learning.
+
 ## Project Overview
 Model Context Protocol server providing RDF triple store capabilities to LLMs through SPARQL.
 
-## Core Stack
-- **FastMCP**: MCP server framework
-- **Pyoxigraph**: RDF triple store with SPARQL 1.1
-- **UV**: Package manager
+**Core Stack**: FastMCP server framework, Pyoxigraph RDF triple store with SPARQL 1.1, UV package manager
+
+## CRITICAL: File Inclusion Behavior
+
+`@filename` is a **CLAUDE.md-specific feature** that automatically includes file content in context:
+
+**Where it works**: ONLY in CLAUDE.md and CLAUDE.local.md files  
+**Where it does NOT work**: Responses, other files, commit messages, anywhere else  
+**Behavior**: Recursively includes content (if `@file1` contains `@file2`, both are included)  
+**Risk**: Massive context bloat - each inclusion can cascade exponentially
+
+**Usage Rule**: Use `@filename` ONLY when you absolutely need the file content in context. Otherwise, reference by path only (`docs/file.md`).
 
 ## Essential Commands
 
@@ -27,101 +51,39 @@ uv run ruff format
 uv run fastmcp install src/mcp_rdf_memory/server.py:mcp --name "RDF Memory"
 ```
 
+## UV Project Management (Essential)
+
+**Never use pip commands - always use UV equivalents:**
+- `uv add package-name` (not `pip install`)
+- `uv add package --dev` (not `pip install` for dev deps)
+- `uv remove package` (not `pip uninstall`)
+- `uv sync` (not `pip install -r requirements.txt`)
+- `uv lock --upgrade` (to update dependencies)
+- `uv run command` (no manual venv activation needed)
+
+**After pulling changes**: Always run `uv sync`
+**Lock file**: `uv.lock` is source of truth, not requirements.txt
+
 ## Key Patterns
 
-### Named Graphs for Context
-- Conversations: `<http://mcp.local/conversation/{id}>`
-- Projects: `<http://mcp.local/project/{id}>`
-
-### Error Handling
+### Error Handling (Core Pattern)
 ```python
 from fastmcp import ToolError
 
-# Always use ToolError for user-facing errors with proper exception chaining
+# Always use ToolError with proper exception chaining
 try:
     results = store.query(query)
 except ValueError as e:
     raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
 except Exception as e:
     raise ToolError(f"Failed to execute SPARQL query: {e}") from e
-
-# Validate queries (read-only) using constants
-for keyword in FORBIDDEN_SPARQL_KEYWORDS:
-    if keyword in query.upper():
-        raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
 ```
 
-### Code Quality & Type Safety
+### Named Graphs for Context
+- Conversations: `<http://mcp.local/conversation/{id}>`
+- Projects: `<http://mcp.local/project/{id}>`
 
-#### Use Specific Types, Avoid Any
-```python
-# Good: Specific union types
-def format_rdf_object(obj: NamedNode | Literal | BlankNode | Triple) -> str:
-
-# Bad: Generic Any type
-def format_rdf_object(obj: Any) -> str:
-```
-
-#### Use isinstance() Instead of hasattr()
-```python
-# Good: Type-based checking
-if isinstance(obj, NamedNode):
-    return f"<{obj.value}>"
-if isinstance(obj, Literal):
-    return f'"{obj.value}"'
-
-# Bad: Runtime attribute checking
-if hasattr(obj, "value"):
-    return f"<{obj.value}>"
-```
-
-#### Early Returns for Clarity
-```python
-# Good: Early returns, no unnecessary defaults
-def format_predicate(predicate: NamedNode | BlankNode) -> str:
-    if isinstance(predicate, NamedNode):
-        return f"<{predicate.value}>"
-    # BlankNode case - we know this is the only other type
-    return f"_:{predicate.value}"
-
-# Bad: Nested if-elif-else with unnecessary fallback
-def format_predicate(predicate):
-    if isinstance(predicate, NamedNode):
-        return f"<{predicate.value}>"
-    elif isinstance(predicate, BlankNode):
-        return f"_:{predicate.value}"
-    else:
-        return str(predicate)  # Unnecessary when types are known
-```
-
-### RDF Node Handling
-
-#### Helper Functions for Formatting
-- `format_subject()` - Handles NamedNode, BlankNode, Triple subjects
-- `format_predicate()` - Handles NamedNode, BlankNode predicates  
-- `format_rdf_object()` - Handles NamedNode, Literal, BlankNode, Triple objects
-- `format_triple()` - Combines all formatting with graph support
-
-#### DefaultGraph vs Named Graphs
-```python
-# DefaultGraph has no .value attribute - handle explicitly
-if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
-    graph_name = "default graph"
-else:
-    graph_name = quad.graph_name.value
-```
-
-#### URI Validation
-```python
-# Use constants and helper functions
-URI_SCHEMES = ("http://", "https://")
-
-def validate_uri(uri: str, context: str = "URI") -> None:
-    if not uri.startswith(URI_SCHEMES):
-        raise ToolError(f"{context} must be a valid HTTP(S) URI")
-```
-
-### Constants
+### Constants (Reference Values)
 ```python
 # URI validation
 URI_SCHEMES = ("http://", "https://")
@@ -130,102 +92,45 @@ URI_SCHEMES = ("http://", "https://")
 FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
 ```
 
+### Type Safety Principles
+- Use specific union types: `NamedNode | Literal | BlankNode`
+- Use `isinstance()` over `hasattr()` for type checking
+- Use early returns for clarity, avoid unnecessary fallbacks
+
+### RDF Node Handling
+**DefaultGraph Handling**: `DefaultGraph` has no `.value` attribute - handle explicitly.
+
 ## LLM-Centric MCP Tool Design
 
 ### Core Principles for LLM-Friendly APIs
-
-**Context Efficiency is Critical**: Every token in tool schemas counts. LLMs scan tool descriptions to decide relevance, so minimize verbose parameter descriptions.
-
-**Self-Documenting Parameter Names**: `graph_name` immediately suggests string input vs `graph` which could imply complex object.
-
-**Examples > Descriptions**: `Field(examples=["chat-123", "project/myapp"])` teaches usage patterns more efficiently than paragraph explanations.
-
-**Simplicity > Technical Purity**: `"chat-123"` → `"http://mcp.local/chat-123"` internally is better than requiring LLMs to construct full URIs.
+- **Context Efficiency is Critical**: Every token in tool schemas counts
+- **Self-Documenting Parameter Names**: `graph_name` vs `graph` immediately suggests string input
+- **Examples > Descriptions**: `Field(examples=["chat-123"])` teaches usage more efficiently than paragraphs
+- **Simplicity > Technical Purity**: `"chat-123"` → `"http://mcp.local/chat-123"` internally vs requiring LLMs to construct URIs
 
 ### Pydantic Type Strategy
+**Decision Framework**: Use Annotated types when validation complexity is justified by preventing common input errors or supporting multiple input formats. Otherwise use simple types with helper validation.
 
-```python
-# ✅ Use Annotated for complex validation with real value
-RDFIdentifier = Annotated[
-    str,
-    PlainValidator(validate_rdf_identifier),
-    WithJsonSchema({"type": "string", "description": "RDF identifier"})
-]
-
-# ✅ Use simple types + helper validation for basic checks  
-graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"])
-
-def create_graph_uri(graph_name: str | None) -> NamedNode | None:
-    if graph_name is None:
-        return None
-    if not graph_name.strip():
-        raise ToolError("Graph name cannot be empty")
-    return NamedNode(f"http://mcp.local/{graph_name.strip()}")
-```
-
-**Decision Framework**: Use Annotated types when validation complexity is justified by:
-- Preventing common input errors
-- Providing meaningful validation feedback  
-- Supporting multiple input formats
-
-Use simple types when validation is just "non-empty string" or similar basic checks.
-
-### Field() Optimization for Context Efficiency
-
-```python
-# ❌ Wastes context tokens
-description="Graph name (automatically prefixed with http://mcp.local/). Use simple names like folder paths for organizing your data."
-
-# ✅ Context-efficient with guidance
-examples=["chat-123", "project/myapp"]
-
-# ✅ Self-documenting parameter name eliminates need for description
-graph_name: str | None = Field(default=None, examples=["temp", "analysis"])
-```
-
-### FastMCP Integration Insights
-
-**Auto-Generated Schemas**: FastMCP creates JSON schemas from Pydantic annotations. LLMs receive:
-- Parameter types and constraints
-- Field descriptions and examples  
-- Required vs optional status
-- Validation error details
-
-**Tool Selection**: LLMs use tool docstrings and parameter schemas to decide when to call tools. Keep docstrings focused on *what* the tool does, not *how* to use parameters.
-
-**Rich Metadata**: WithJsonSchema and Field() arguments become part of the tool interface visible to LLMs.
+### Field() Optimization
+Use `examples=["chat-123", "project/myapp"]` instead of verbose descriptions to save context tokens.
 
 ### Graph Naming Convention
+Simple string names get auto-namespaced: `"conversation/chat-123"` → `"http://mcp.local/conversation/chat-123"`
 
-**Pattern**: Simple string names get auto-namespaced
-```python
-# LLM Input: "conversation/chat-123"
-# Internal URI: "http://mcp.local/conversation/chat-123"
-
-graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"])
-```
-
-**Benefits**:
-- No URI syntax errors
-- Natural folder-like organization
-- Consistent namespace management
-- Reduced cognitive load for LLMs
+**Benefits**: No URI syntax errors, natural folder-like organization, reduced cognitive load for LLMs.
 
 ## Tool Development Guidelines
 
-### Function Structure
+### Function Structure Pattern
 ```python
 @mcp.tool()
 def tool_name(params: TypedModel) -> str:
     """Clear docstring describing the tool's purpose."""
     try:
         # Main logic with proper error handling
-        # Use helper functions for complex operations
         return "Success message with details"
-    
     except ToolError:
-        # Re-raise ToolErrors as-is to preserve context
-        raise
+        raise  # Re-raise ToolErrors as-is
     except SpecificError as e:
         raise ToolError(f"Specific error message: {e}") from e
     except Exception as e:
@@ -233,204 +138,57 @@ def tool_name(params: TypedModel) -> str:
 ```
 
 ### Empty Input Handling
-```python
-# Don't validate against empty lists - handle gracefully
-# ❌ Bad: if not items: raise ToolError("No items provided")
-# ✅ Good: Let empty lists process normally and return appropriate success message
-```
+Don't validate against empty lists - handle gracefully and return appropriate success messages.
 
 ## Server Entry Point
 `src/mcp_rdf_memory/server.py:mcp` - FastMCP server instance
 
-## Testing Best Practices
+## Testing Principles
 
-**🚨 MANDATORY: Before modifying any file in tests/, read `docs/project/testing-guidelines.md` first.**
+**🚨 MANDATORY: Read testing docs before modifying any test files.**
 
-### Critical Testing Rules
+### Critical Rules
+- **NEVER modify tests to accommodate bugs** - only when test is incorrect or requirements changed
+- **Test realism check**: "Can LLMs actually call this tool with this input in production?"
+- **Use native dict inputs** - test with raw `dict` objects, never Pydantic models
+- **Validate JSON structure first** - before reconstructing objects
+- **Test round-trip data integrity** - ensure data survives complete cycles unchanged
+- **Include malformed input testing** - test realistic error scenarios
 
-**NEVER Modify Tests to Accommodate Bugs**: Tests should NEVER be updated to make failing tests pass due to application bugs. Only modify tests when: the test is incorrect OR requirements legitimately changed.
-
-**Test Realism Check**: Before writing any test ask: "Can LLMs actually call this tool with this input in production?"
-
-**Use Native Dict Inputs**: Always test with raw `dict` objects, never Pydantic models. This ensures we're testing real MCP input validation.
-
-### Input Validation Testing
-
+### Essential Test Pattern
 ```python
-# ✅ Good: Test with native dict - tests real MCP input
-await client.call_tool("add_triples", {
-    "triples": [
-        {
-            "subject": "http://example.org/test",
-            "predicate": "http://schema.org/name", 
-            "object": "Test Value"
-        }
-    ]
-})
-
-# ❌ Bad: Testing with Pydantic models bypasses input validation
-triple = TripleModel(subject="...", predicate="...", object="...")
-await client.call_tool("add_triples", {"triples": [triple]})
+# 1. Native dict input, 2. Validate result structure, 3. Validate JSON, 4. Test reconstruction
+result = await client.call_tool("tool_name", {"field": "value"})  # Raw dict
+content = result[0]; assert isinstance(content, TextContent)
+raw_json = json.loads(content.text); assert isinstance(raw_json, list)
+validated_objects = [ModelClass(**item) for item in raw_json]
 ```
 
-### Output Serialization Validation
+**Testing Documentation**: `docs/project/testing/` - Start with README.md for navigation and quick reference
 
-**Always validate the actual JSON structure**, not just reconstructed objects:
+## Analysis and Validation Principles
 
-```python
-# ✅ Good: Validate actual JSON structure before reconstruction
-result = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
-content = result[0]
-assert isinstance(content, TextContent)
+**CRITICAL: Always validate assumptions against actual behavior before making changes.**
 
-# Parse and validate JSON structure
-raw_data = json.loads(content.text)
-assert isinstance(raw_data, list)
-assert all(isinstance(item, dict) for item in raw_data)
+### Before Analyzing or Modifying Code
+- Run existing tests: `uv run pytest`
+- Use context7 for framework docs when making assumptions
+- Validate against actual implementation - don't rely on assumptions
+- Look for what's working before trying to fix what's broken
 
-# Validate required fields exist in JSON
-for item in raw_data:
-    assert "subject" in item
-    assert "predicate" in item  
-    assert "object" in item
-    assert "graph" in item
+### Common Analysis Pitfalls to Avoid
+- ❌ Assuming test failures mean tests are wrong (failing tests often catch real bugs)
+- ❌ Declaring framework behavior without validation (FastMCP/pyoxigraph have specific behaviors)
+- ❌ Over-engineering solutions (existing patterns may be correct)
+- ❌ Testing implementation details (focus on contracts and realistic usage)
 
-# Then reconstruct to verify schema compliance
-quads = [QuadResult(**quad) for quad in raw_data]
-
-# ❌ Bad: Only testing reconstruction, not actual JSON output
-raw_data = json.loads(content.text)
-quads = [QuadResult(**quad) for quad in raw_data]  # Skips JSON validation
-```
-
-### Round-Trip Data Integrity Testing
-
-Test that data survives the complete cycle unchanged:
-
-```python
-# ✅ Good: Round-trip integrity test
-original_data = {
-    "subject": "http://example.org/test",
-    "predicate": "http://schema.org/name",
-    "object": "Test Name with Unicode 🌍"
-}
-
-# Add data
-await client.call_tool("add_triples", {"triples": [original_data]})
-
-# Retrieve via pattern matching
-result = await client.call_tool("quads_for_pattern", {"subject": original_data["subject"]})
-content = result[0]
-assert isinstance(content, TextContent)
-
-retrieved_quads = json.loads(content.text)
-assert len(retrieved_quads) == 1
-
-quad = retrieved_quads[0]
-# Verify exact data preservation (accounting for formatting)
-assert original_data["subject"] in quad["subject"]  # May be wrapped in <>
-assert original_data["predicate"] in quad["predicate"]
-assert original_data["object"] in quad["object"]  # May be wrapped in ""
-```
-
-### Edge Case Testing
-
-**Test serialization of problematic data**:
-
-```python
-# Unicode and special characters
-unicode_test = {
-    "subject": "http://example.org/unicode",
-    "predicate": "http://schema.org/name", 
-    "object": "Test with Unicode: 世界, Emoji: 🌍, Quotes: \"test\""
-}
-
-# Very long strings
-long_string_test = {
-    "subject": "http://example.org/long",
-    "predicate": "http://schema.org/description",
-    "object": "A" * 10000  # Test large data serialization
-}
-
-# Empty results
-empty_result = await client.call_tool("quads_for_pattern", {"subject": "http://nonexistent"})
-content = empty_result[0]
-assert isinstance(content, TextContent)
-assert json.loads(content.text) == []  # Verify empty list serializes correctly
-```
-
-### Malformed Input Testing
-
-**Test validation with realistic malformed inputs**:
-
-```python
-# ✅ Good: Test actual malformed dict inputs
-malformed_inputs = [
-    {"triples": [{"subject": "", "predicate": "valid", "object": "valid"}]},  # Empty subject
-    {"triples": [{"subject": "valid"}]},  # Missing required fields
-    {"triples": [{"subject": "invalid-uri", "predicate": "valid", "object": "valid"}]},  # Invalid URI
-    {"triples": "not-a-list"},  # Wrong type for triples
-    {},  # Missing triples field
-]
-
-for malformed_input in malformed_inputs:
-    with pytest.raises(ToolError):
-        await client.call_tool("add_triples", malformed_input)
-```
-
-### Test Structure Pattern
-
-```python
-@pytest.mark.asyncio
-async def test_tool_comprehensive(client: Client) -> None:
-    """Comprehensive test following best practices."""
-    
-    # 1. Test with native dict input
-    input_data = {"field": "value"}  # Raw dict, not Pydantic model
-    
-    # 2. Execute tool
-    result = await client.call_tool("tool_name", input_data)
-    
-    # 3. Validate result structure
-    assert len(result) == 1
-    content = result[0] 
-    assert isinstance(content, TextContent)
-    
-    # 4. Validate JSON serialization
-    raw_json = json.loads(content.text)
-    assert isinstance(raw_json, (list, dict))  # Expected JSON type
-    
-    # 5. Validate JSON schema
-    # ... check required fields exist and have correct types
-    
-    # 6. Test reconstruction works
-    validated_objects = [ModelClass(**item) for item in raw_json]
-    
-    # 7. Verify data integrity
-    # ... assert original data values are preserved correctly
-```
-
-### Common Anti-Patterns to Avoid
-
-```python
-# ❌ Don't assume TextContent without checking
-result_text = result[0].text  # Could fail if result[0] is ImageContent
-
-# ❌ Don't skip JSON validation  
-objects = [QuadResult(**item) for item in json.loads(content.text)]  # Skips structure validation
-
-# ❌ Don't use hardcoded models in tests
-test_input = TripleModel(...)  # Bypasses input validation
-
-# ❌ Don't ignore empty result testing
-# Always test tools with inputs that produce empty results
-
-# ❌ Don't test only happy path
-# Always include malformed input and edge case testing
-```
+### Framework Behavior Validation
+- Use context7 to get actual documentation before making assumptions
+- Test actual behavior rather than assuming how frameworks should work
+- Key validation areas: tool return value handling, input validation patterns, error handling
 
 ## Debugging
 - Use IDE diagnostics to identify and troubleshoot issues
-- Run `uv run pytest -v` to test all functionality
+- Run `uv run pytest` to test all functionality (add `-v` for verbose output)
 - Use `uv run ruff check` for linting issues
 - Check type annotations with IDE (Pylance) for type safety

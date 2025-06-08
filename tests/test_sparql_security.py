@@ -44,7 +44,7 @@ async def test_sparql_keywords_in_comments(client: Client) -> None:
         # These should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
         # Should return valid results (empty or otherwise)
-        assert isinstance(result, list | bool)
+        assert isinstance(result, list)
 
 
 @pytest.mark.asyncio
@@ -80,7 +80,7 @@ async def test_sparql_keywords_in_string_literals(client: Client) -> None:
         # Should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
         # Should return valid results
-        assert isinstance(result, list | bool)
+        assert isinstance(result, list)
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,7 @@ async def test_sparql_keywords_as_substrings(client: Client) -> None:
     for query in substring_queries:
         # Should NOT raise ToolError about forbidden keywords
         result = await client.call_tool("rdf_query", {"query": query})
-        assert isinstance(result, list | bool)
+        assert isinstance(result, list)
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,6 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from pydantic import BaseModel, Field, PlainValidator, WithJsonSchema
 from pyoxigraph import (
-    BlankNode,
     DefaultGraph,
     Literal,
     NamedNode,
@@ -18,7 +17,6 @@ from pyoxigraph import (
     QueryBoolean,
     QuerySolutions,
     Store,
-    Triple,
 )
 
 # Constants
@@ -99,36 +97,6 @@ RDFNode = Annotated[
     PlainValidator(validate_rdf_node),
     WithJsonSchema({"type": "string", "description": "RDF node (identifier or literal value)"}),
 ]
-
-
-def format_rdf_object(obj: NamedNode | Literal | BlankNode | Triple) -> str:
-    """Format an RDF object for display."""
-    if isinstance(obj, NamedNode):
-        return f"<{obj.value}>"
-    if isinstance(obj, Literal):
-        return f'"{obj.value}"'
-    if isinstance(obj, BlankNode):
-        return f"_:{obj.value}"
-    # Triple case
-    return str(obj)
-
-
-def format_subject(subject: NamedNode | BlankNode | Triple) -> str:
-    """Format an RDF subject for display."""
-    if isinstance(subject, NamedNode):
-        return f"<{subject.value}>"
-    if isinstance(subject, BlankNode):
-        return f"_:{subject.value}"
-    # Triple case
-    return str(subject)
-
-
-def format_predicate(predicate: NamedNode | BlankNode) -> str:
-    """Format an RDF predicate for display."""
-    if isinstance(predicate, NamedNode):
-        return f"<{predicate.value}>"
-    # BlankNode case
-    return f"_:{predicate.value}"
 
 
 def _remove_sparql_comments_and_strings(query: str) -> str:
@@ -221,9 +189,9 @@ def quads_for_pattern(
 
         results.append(
             QuadResult(
-                subject=format_subject(quad.subject),
-                predicate=format_predicate(quad.predicate),
-                object=format_rdf_object(quad.object),
+                subject=str(quad.subject),
+                predicate=str(quad.predicate),
+                object=str(quad.object),
                 graph=graph_name,
             )
         )
@@ -278,16 +246,16 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
                 var_name = var.value  # Get variable name without ? prefix
                 value = solution[var_name]
                 if value is not None:
-                    binding[var_name] = format_rdf_object(value)
+                    binding[var_name] = str(value)
             solutions.append(binding)
         return solutions
 
     # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
     return [
         QuadResult(
-            subject=format_subject(triple.subject),
-            predicate=format_predicate(triple.predicate),
-            object=format_rdf_object(triple.object),
+            subject=str(triple.subject),
+            predicate=str(triple.predicate),
+            object=str(triple.object),
             graph="default graph",  # Triples from CONSTRUCT/DESCRIBE don't have explicit graphs
         )
         for triple in results

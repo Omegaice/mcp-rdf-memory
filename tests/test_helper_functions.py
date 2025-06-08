@@ -3,13 +3,10 @@ Direct unit tests for helper functions in the server module.
 """
 
 import pytest
-from pyoxigraph import BlankNode, Literal, NamedNode, Triple
+from pyoxigraph import Literal, NamedNode
 
 from mcp_rdf_memory.server import (
     create_rdf_node,
-    format_predicate,
-    format_rdf_object,
-    format_subject,
     validate_rdf_identifier,
 )
 
@@ -100,90 +97,6 @@ class TestCreateRdfNode:
             assert node.value == identifier
 
 
-class TestFormatRdfObject:
-    """Test the format_rdf_object helper function."""
-
-    def test_format_named_node(self) -> None:
-        """Test formatting NamedNode objects."""
-        node = NamedNode("http://example.org/test")
-        result = format_rdf_object(node)
-        assert result == "<http://example.org/test>"
-
-    def test_format_literal(self) -> None:
-        """Test formatting Literal objects."""
-        node = Literal("test value")
-        result = format_rdf_object(node)
-        assert result == '"test value"'
-
-        # Test with special characters
-        node = Literal('value with "quotes"')
-        result = format_rdf_object(node)
-        assert result == '"value with "quotes""'
-
-    def test_format_blank_node(self) -> None:
-        """Test formatting BlankNode objects."""
-        node = BlankNode("b1")
-        result = format_rdf_object(node)
-        assert result == "_:b1"
-
-    def test_format_triple(self) -> None:
-        """Test formatting Triple objects (quoted triples)."""
-        # Create a triple
-        subject = NamedNode("http://example.org/subject")
-        predicate = NamedNode("http://example.org/predicate")
-        obj = Literal("object")
-        triple = Triple(subject, predicate, obj)
-
-        result = format_rdf_object(triple)
-        # Should fall back to str() representation
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-
-class TestFormatSubject:
-    """Test the format_subject helper function."""
-
-    def test_format_named_node_subject(self) -> None:
-        """Test formatting NamedNode subjects."""
-        node = NamedNode("http://example.org/subject")
-        result = format_subject(node)
-        assert result == "<http://example.org/subject>"
-
-    def test_format_blank_node_subject(self) -> None:
-        """Test formatting BlankNode subjects."""
-        node = BlankNode("subj1")
-        result = format_subject(node)
-        assert result == "_:subj1"
-
-    def test_format_triple_subject(self) -> None:
-        """Test formatting Triple subjects (quoted triple subjects)."""
-        subject = NamedNode("http://example.org/inner")
-        predicate = NamedNode("http://example.org/pred")
-        obj = Literal("value")
-        triple = Triple(subject, predicate, obj)
-
-        result = format_subject(triple)
-        # Should fall back to str() representation
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-
-class TestFormatPredicate:
-    """Test the format_predicate helper function."""
-
-    def test_format_named_node_predicate(self) -> None:
-        """Test formatting NamedNode predicates."""
-        node = NamedNode("http://schema.org/name")
-        result = format_predicate(node)
-        assert result == "<http://schema.org/name>"
-
-    def test_format_blank_node_predicate(self) -> None:
-        """Test formatting BlankNode predicates."""
-        node = BlankNode("pred1")
-        result = format_predicate(node)
-        assert result == "_:pred1"
-
-
 class TestHelperFunctionEdgeCases:
     """Test edge cases for helper functions."""
 
@@ -196,7 +109,7 @@ class TestHelperFunctionEdgeCases:
 
         # Empty literal formatting
         empty_literal = Literal("")
-        result = format_rdf_object(empty_literal)
+        result = str(empty_literal)
         assert result == '""'
 
     def test_special_characters_in_uris(self) -> None:
@@ -205,14 +118,14 @@ class TestHelperFunctionEdgeCases:
         node = create_rdf_node("http://example.org/test#fragment")
         assert isinstance(node, NamedNode)
 
-        result = format_rdf_object(node)
+        result = str(node)
         assert result == "<http://example.org/test#fragment>"
 
         # URI with query parameters
         node = create_rdf_node("http://example.org/test?param=value")
         assert isinstance(node, NamedNode)
 
-        result = format_rdf_object(node)
+        result = str(node)
         assert result == "<http://example.org/test?param=value>"
 
     def test_unicode_in_literals(self) -> None:
@@ -221,7 +134,7 @@ class TestHelperFunctionEdgeCases:
         node = create_rdf_node(unicode_text)
         assert isinstance(node, Literal)
 
-        result = format_rdf_object(node)
+        result = str(node)
         assert result == f'"{unicode_text}"'
 
     def test_very_long_values(self) -> None:
