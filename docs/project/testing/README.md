@@ -10,7 +10,7 @@
 ## Essential Test Naming Patterns
 
 - `test_add_triples_should_preserve_data_when_valid_input()` - Positive scenarios
-- `test_sparql_query_should_reject_modification_when_insert_attempted()` - Security validation
+- `test_rdf_query_only_supports_read_operations()` - Architectural boundary validation
 - `test_add_triples_should_fail_validation_when_invalid_uri()` - Input validation
 - `test_round_trip_should_preserve_unicode_when_special_characters()` - Data integrity
 
@@ -39,10 +39,10 @@
   - Cross-query consistency testing
 
 ### 🔐 Security
-- **[SPARQL Security](./sparql-security.md)** - SPARQL injection prevention
-  - Forbidden operation blocking
-  - Case sensitivity and injection patterns
-  - Legitimate query validation
+- **Architectural Security** - Built-in security through API design
+  - Query/update method separation in pyoxigraph
+  - Parser-level rejection of modification operations
+  - No keyword filtering required
 
 ### ✅ Input Validation
 - **[Input Validation](./input-validation.md)** - Realistic malformed input testing
@@ -70,8 +70,8 @@
 ### "I need to test a new MCP tool"
 → Start with [Testing Strategy](./testing-strategy.md), then [MCP Contract Testing](./mcp-contract-testing.md)
 
-### "I need to test SPARQL functionality"
-→ [SPARQL Security](./sparql-security.md) + [RDF Data Integrity](./rdf-data-integrity.md)
+### "I need to test SPARQL functionality"  
+→ [RDF Data Integrity](./rdf-data-integrity.md) - SPARQL security is handled architecturally
 
 ### "I need to test error handling"
 → [Input Validation](./input-validation.md) + [Core Principles](./core-principles.md)
@@ -180,7 +180,7 @@ When adding new testing patterns:
 - **FastMCP**: Returns `[]` for empty results, `TextContent` for non-empty
 - **Pyoxigraph**: Internal RDF serialization may add quotes or escaping
 - **Pydantic**: Input validation happens before tool execution
-- **SPARQL**: Case-sensitive keyword detection for security
+- **SPARQL**: Read/write separation enforced by pyoxigraph parser
 - **JSON**: All tool outputs must be valid JSON for MCP compatibility
 
 This documentation structure ensures focused guidance while maintaining comprehensive coverage of all testing scenarios in the MCP RDF Memory project.

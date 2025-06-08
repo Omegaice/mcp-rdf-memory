@@ -68,13 +68,13 @@ def test_create_graph_uri_edge_cases():
     assert result.value == "http://mcp.local/test-graph"
 ```
 
-**Security-critical logic**:
+**Architectural boundary validation**:
 ```python
-def test_sparql_comment_removal():
-    """Test SPARQL security parsing with tricky inputs."""
-    query = "SELECT * WHERE { # INSERT comment\n ?s ?p ?o }"
-    cleaned = _remove_sparql_comments_and_strings(query)
-    assert "INSERT" not in cleaned
+def test_rdf_query_only_supports_read_operations():
+    """Test that query API only supports read operations by design."""
+    with pytest.raises(ToolError) as exc_info:
+        await client.call_tool("rdf_query", {"query": "INSERT DATA { ... }"})
+    assert "expected construct" in str(exc_info.value).lower()
 ```
 
 **Validation functions with edge cases**:

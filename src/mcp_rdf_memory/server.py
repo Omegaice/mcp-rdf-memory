@@ -19,9 +19,6 @@ from pyoxigraph import (
     Store,
 )
 
-# Constants
-FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
-
 # Create in-memory RDF store
 store = Store()
 
@@ -99,24 +96,6 @@ RDFNode = Annotated[
 ]
 
 
-def _remove_sparql_comments_and_strings(query: str) -> str:
-    """Remove comments and string literals from SPARQL query for keyword checking."""
-    import re
-
-    # Remove single-line comments (# comment)
-    query = re.sub(r"#.*?$", " ", query, flags=re.MULTILINE)
-
-    # Remove string literals in single quotes
-    query = re.sub(r"'[^']*'", " ", query)
-
-    # Remove string literals in double quotes
-    query = re.sub(r'"[^"]*"', " ", query)
-
-    # Remove multi-line string literals (triple quotes)
-    query = re.sub(r'""".*?"""', " ", query, flags=re.DOTALL)
-    query = re.sub(r"'''.*?'''", " ", query, flags=re.DOTALL)
-
-    return query
 
 
 class TripleModel(BaseModel):
@@ -208,19 +187,9 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
     - SELECT queries: list[dict] (variable bindings)
     - CONSTRUCT/DESCRIBE queries: list[QuadResult]
 
-    Modification queries (INSERT, DELETE, DROP, CLEAR) are not allowed.
+    Supports read operations only (SELECT, ASK, CONSTRUCT, DESCRIBE).
+    Modification operations use separate update methods not exposed as MCP tools.
     """
-    # Validate query is read-only - check for forbidden keywords as actual operations
-    # Remove comments and string literals before checking
-    cleaned_query = _remove_sparql_comments_and_strings(query.upper())
-
-    for keyword in FORBIDDEN_SPARQL_KEYWORDS:
-        # Check if keyword appears as standalone operation (word boundary)
-        import re
-
-        if re.search(rf"\b{keyword}\b", cleaned_query):
-            raise ToolError(f"Modification queries not allowed. '{keyword}' operations are forbidden.")
-
     # Execute the SPARQL query
     try:
         results = store.query(query)

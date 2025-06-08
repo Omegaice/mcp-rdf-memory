@@ -147,17 +147,26 @@ async def test_rdf_query_invalid_syntax(client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_modification_blocked(client: Client) -> None:
-    """Test that modification queries (INSERT/DELETE) are blocked."""
-    # Try INSERT query
-    with pytest.raises(ToolError):
+async def test_rdf_query_only_supports_read_operations(client: Client) -> None:
+    """Test that rdf_query only supports read operations due to pyoxigraph query() API design.
+    
+    The pyoxigraph library separates read operations (query method) from write operations 
+    (update method). The query() method only accepts SELECT, ASK, CONSTRUCT, DESCRIBE 
+    and rejects modification operations with syntax errors.
+    """
+    # INSERT operations require the update() method, not query() method
+    with pytest.raises(ToolError) as exc_info:
         await client.call_tool(
             "rdf_query", {"query": "INSERT DATA { <http://example.org/test> <http://example.org/prop> 'value' }"}
         )
+    error_msg = str(exc_info.value).lower()
+    assert "expected construct" in error_msg or "syntax" in error_msg or "invalid" in error_msg
 
-    # Try DELETE query
-    with pytest.raises(ToolError):
+    # DELETE operations also require the update() method, not query() method
+    with pytest.raises(ToolError) as exc_info:
         await client.call_tool("rdf_query", {"query": "DELETE WHERE { ?s ?p ?o }"})
+    error_msg = str(exc_info.value).lower()
+    assert "expected construct" in error_msg or "syntax" in error_msg or "invalid" in error_msg
 
 
 @pytest.mark.asyncio

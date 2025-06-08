@@ -88,8 +88,10 @@ except Exception as e:
 # URI validation
 URI_SCHEMES = ("http://", "https://")
 
-# SPARQL security - modification operations not allowed
-FORBIDDEN_SPARQL_KEYWORDS = ["INSERT", "DELETE", "DROP", "CLEAR", "CREATE", "LOAD", "COPY", "MOVE", "ADD"]
+# SPARQL Security Model
+# - query() method: read operations only (SELECT, ASK, CONSTRUCT, DESCRIBE)
+# - update() method: modification operations (INSERT, DELETE, etc.) - not exposed as MCP tool
+# - Natural separation provides security without keyword validation
 ```
 
 ### Type Safety Principles
