@@ -16,7 +16,7 @@ async def test_complete_workflow_default_graph(client: Client) -> None:
     """Test complete workflow: add data → query → pattern match → verify."""
     # Step 1: Add structured data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -45,14 +45,14 @@ async def test_complete_workflow_default_graph(client: Client) -> None:
 
     # Step 2: Query using SPARQL
     sparql_result = await client.call_tool(
-        "rdf_query", {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_sparql_query", {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
     )
     assert len(sparql_result) == 1
     # SPARQL results are returned as TextContent by FastMCP
     assert isinstance(sparql_result[0], TextContent)
 
     # Step 3: Pattern matching
-    name_pattern_result = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
+    name_pattern_result = await client.call_tool("rdf_find_triples", {"predicate": "http://schema.org/name"})
     assert len(name_pattern_result) == 1
     assert isinstance(name_pattern_result[0], TextContent)
 
@@ -81,7 +81,7 @@ async def test_complete_workflow_default_graph(client: Client) -> None:
     assert len(quads) >= 2  # Should have both people
 
     # Step 4: Verify specific relationships with JSON validation
-    knows_result = await client.call_tool("quads_for_pattern", {"predicate": "http://xmlns.com/foaf/0.1/knows"})
+    knows_result = await client.call_tool("rdf_find_triples", {"predicate": "http://xmlns.com/foaf/0.1/knows"})
     assert len(knows_result) == 1
     content = knows_result[0]
     assert isinstance(content, TextContent)
@@ -118,11 +118,11 @@ async def test_mixed_graph_operations(client: Client, sample_graph_uri: str) -> 
     }
 
     # Add to both graphs
-    await client.call_tool("add_triples", {"triples": [default_triple]})
-    await client.call_tool("add_triples", {"triples": [named_triple]})
+    await client.call_tool("rdf_add_triples", {"triples": [default_triple]})
+    await client.call_tool("rdf_add_triples", {"triples": [named_triple]})
 
     # Query all graphs (should see both) with JSON validation
-    all_contexts = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/mixed/shared"})
+    all_contexts = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/mixed/shared"})
     assert len(all_contexts) == 1
     content = all_contexts[0]
     assert isinstance(content, TextContent)
@@ -142,7 +142,7 @@ async def test_mixed_graph_operations(client: Client, sample_graph_uri: str) -> 
 
     # Query specific graph
     named_only = await client.call_tool(
-        "quads_for_pattern", {"subject": "http://example.org/mixed/shared", "graph_name": "conversation/test-123"}
+        "rdf_find_triples", {"subject": "http://example.org/mixed/shared", "graph_name": "conversation/test-123"}
     )
     assert len(named_only) == 1
     content = named_only[0]
@@ -172,7 +172,7 @@ async def test_query_result_consistency(client: Client) -> None:
     test_object = "Consistency Test"
 
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -186,16 +186,16 @@ async def test_query_result_consistency(client: Client) -> None:
 
     # Method 1: SPARQL SELECT
     sparql_result = await client.call_tool(
-        "rdf_query", {"query": f"SELECT ?name WHERE {{ <{test_subject}> <{test_predicate}> ?name }}"}
+        "rdf_sparql_query", {"query": f"SELECT ?name WHERE {{ <{test_subject}> <{test_predicate}> ?name }}"}
     )
     assert len(sparql_result) == 1
 
     # Method 2: Pattern matching by subject
-    pattern_by_subject = await client.call_tool("quads_for_pattern", {"subject": test_subject})
+    pattern_by_subject = await client.call_tool("rdf_find_triples", {"subject": test_subject})
     assert len(pattern_by_subject) == 1
 
     # Method 3: Pattern matching by predicate
-    pattern_by_predicate = await client.call_tool("quads_for_pattern", {"predicate": test_predicate})
+    pattern_by_predicate = await client.call_tool("rdf_find_triples", {"predicate": test_predicate})
     assert len(pattern_by_predicate) == 1
 
     # All methods should find the same data
@@ -237,7 +237,7 @@ async def test_sparql_construct_to_pattern_roundtrip(client: Client) -> None:
     """Test CONSTRUCT query results can be found via pattern matching."""
     # Add source data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -256,7 +256,7 @@ async def test_sparql_construct_to_pattern_roundtrip(client: Client) -> None:
 
     # Use CONSTRUCT to create new virtual triples
     construct_result = await client.call_tool(
-        "rdf_query",
+        "rdf_sparql_query",
         {
             "query": """
             CONSTRUCT { 
@@ -296,7 +296,7 @@ async def test_error_recovery_workflow(client: Client) -> None:
     """Test that errors in one operation don't affect subsequent operations."""
     # Start with valid operation
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -313,17 +313,17 @@ async def test_error_recovery_workflow(client: Client) -> None:
 
     with pytest.raises(ToolError):
         await client.call_tool(
-            "add_triples",
+            "rdf_add_triples",
             {"triples": [{"subject": "invalid-uri", "predicate": "http://schema.org/name", "object": "Invalid"}]},
         )
 
     # Verify previous data is still accessible
-    recovery_result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/recovery/test"})
+    recovery_result = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/recovery/test"})
     assert len(recovery_result) == 1
 
     # Perform another valid operation
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -336,7 +336,7 @@ async def test_error_recovery_workflow(client: Client) -> None:
     )
 
     # Verify both valid operations succeeded with JSON validation
-    all_recovery = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
+    all_recovery = await client.call_tool("rdf_find_triples", {"predicate": "http://schema.org/name"})
     assert len(all_recovery) == 1
     content = all_recovery[0]
     assert isinstance(content, TextContent)
@@ -378,11 +378,11 @@ async def test_batch_operations_consistency(client: Client) -> None:
         ])
 
     # Add all at once
-    await client.call_tool("add_triples", {"triples": batch_triples})
+    await client.call_tool("rdf_add_triples", {"triples": batch_triples})
 
     # Verify all data was added with JSON validation
     all_names = await client.call_tool(
-        "rdf_query", {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_sparql_query", {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"}
     )
     assert len(all_names) == 1
     count_content = all_names[0]
@@ -405,7 +405,7 @@ async def test_batch_operations_consistency(client: Client) -> None:
     assert int(count_value) >= 50
 
     # Pattern query should find all subjects with JSON validation
-    all_batch_people = await client.call_tool("quads_for_pattern", {"predicate": "http://schema.org/name"})
+    all_batch_people = await client.call_tool("rdf_find_triples", {"predicate": "http://schema.org/name"})
     assert len(all_batch_people) == 1
     content = all_batch_people[0]
     assert isinstance(content, TextContent)
@@ -470,10 +470,10 @@ async def test_round_trip_data_integrity(client: Client) -> None:
         original_data = test_case["data"]
 
         # Add data using native dict (tests input validation)
-        await client.call_tool("add_triples", {"triples": [original_data]})
+        await client.call_tool("rdf_add_triples", {"triples": [original_data]})
 
         # Retrieve via pattern matching
-        result = await client.call_tool("quads_for_pattern", {"subject": original_data["subject"]})
+        result = await client.call_tool("rdf_find_triples", {"subject": original_data["subject"]})
         content = result[0]
         assert isinstance(content, TextContent)
 
@@ -515,12 +515,17 @@ async def test_round_trip_data_integrity(client: Client) -> None:
 async def test_empty_results_serialization(client: Client) -> None:
     """Test that empty results are handled correctly by FastMCP."""
     # Query for non-existent data
-    empty_result = await client.call_tool("quads_for_pattern", {"subject": "http://nonexistent.example.org/test"})
+    empty_result = await client.call_tool("rdf_find_triples", {"subject": "http://nonexistent.example.org/test"})
 
-    # For empty results, FastMCP returns an empty list (no TextContent wrapper)
+    # Empty results now return empty JSON array (wrapped in TextContent) 
     assert isinstance(empty_result, list)
-    assert len(empty_result) == 0
-    assert empty_result == []
+    assert len(empty_result) == 1
+    assert isinstance(empty_result[0], TextContent)
+    
+    # Validate JSON structure
+    empty_data = json.loads(empty_result[0].text)
+    assert isinstance(empty_data, list)
+    assert len(empty_data) == 0
 
 
 @pytest.mark.asyncio
@@ -547,7 +552,7 @@ async def test_malformed_input_validation(client: Client) -> None:
 
     for malformed_input in malformed_inputs:
         with pytest.raises(ToolError):
-            await client.call_tool("add_triples", malformed_input)
+            await client.call_tool("rdf_add_triples", malformed_input)
 
 
 @pytest.mark.asyncio
@@ -555,7 +560,7 @@ async def test_sparql_result_serialization(client: Client) -> None:
     """Test SPARQL results serialize correctly for different query types."""
     # Add test data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -570,7 +575,7 @@ async def test_sparql_result_serialization(client: Client) -> None:
 
     # Test SELECT query serialization
     select_result = await client.call_tool(
-        "rdf_query",
+        "rdf_sparql_query",
         {
             "query": "SELECT ?name ?age WHERE { <http://example.org/sparql/person> <http://schema.org/name> ?name ; <http://schema.org/age> ?age }"
         },
@@ -592,7 +597,7 @@ async def test_sparql_result_serialization(client: Client) -> None:
 
     # Test ASK query serialization
     ask_result = await client.call_tool(
-        "rdf_query", {"query": "ASK { <http://example.org/sparql/person> <http://schema.org/name> ?name }"}
+        "rdf_sparql_query", {"query": "ASK { <http://example.org/sparql/person> <http://schema.org/name> ?name }"}
     )
     content = ask_result[0]
     assert isinstance(content, TextContent)

@@ -1,5 +1,5 @@
 """
-Tests for the rdf_query tool.
+Tests for the rdf_sparql_query tool.
 """
 
 import pytest
@@ -9,19 +9,19 @@ from mcp.types import TextContent
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_tool_available(client: Client) -> None:
-    """Test that rdf_query tool is available."""
+async def test_rdf_sparql_query_tool_available(client: Client) -> None:
+    """Test that rdf_sparql_query tool is available."""
     tools = await client.list_tools()
     tool_names = [tool.name for tool in tools]
-    assert "rdf_query" in tool_names
+    assert "rdf_sparql_query" in tool_names
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_select(client: Client) -> None:
+async def test_rdf_sparql_query_select(client: Client) -> None:
     """Test SPARQL SELECT query."""
     # First add some test data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -40,7 +40,7 @@ async def test_rdf_query_select(client: Client) -> None:
 
     # Query for all names
     result = await client.call_tool(
-        "rdf_query", {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_sparql_query", {"query": "SELECT ?name WHERE { ?person <http://schema.org/name> ?name }"}
     )
 
     assert len(result) == 1
@@ -50,11 +50,11 @@ async def test_rdf_query_select(client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_ask(client: Client) -> None:
+async def test_rdf_sparql_query_ask(client: Client) -> None:
     """Test SPARQL ASK query."""
     # Add test data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -68,7 +68,7 @@ async def test_rdf_query_ask(client: Client) -> None:
 
     # ASK if the person exists
     result = await client.call_tool(
-        "rdf_query", {"query": "ASK { <http://example.org/person/test_ask> <http://schema.org/name> ?name }"}
+        "rdf_sparql_query", {"query": "ASK { <http://example.org/person/test_ask> <http://schema.org/name> ?name }"}
     )
 
     assert len(result) == 1
@@ -77,11 +77,11 @@ async def test_rdf_query_ask(client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_construct(client: Client) -> None:
+async def test_rdf_sparql_query_construct(client: Client) -> None:
     """Test SPARQL CONSTRUCT query."""
     # Add test data
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -95,7 +95,7 @@ async def test_rdf_query_construct(client: Client) -> None:
 
     # CONSTRUCT new triples
     result = await client.call_tool(
-        "rdf_query",
+        "rdf_sparql_query",
         {
             "query": """
         CONSTRUCT { ?person <http://example.org/hasName> ?name }
@@ -111,11 +111,11 @@ async def test_rdf_query_construct(client: Client) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_with_named_graph(client: Client, sample_graph_uri: str) -> None:
+async def test_rdf_sparql_query_with_named_graph(client: Client, sample_graph_uri: str) -> None:
     """Test SPARQL query with named graph."""
     # Add data to named graph
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -130,7 +130,7 @@ async def test_rdf_query_with_named_graph(client: Client, sample_graph_uri: str)
 
     # Query specific graph
     result = await client.call_tool(
-        "rdf_query",
+        "rdf_sparql_query",
         {"query": f"SELECT ?name FROM <{sample_graph_uri}> WHERE {{ ?person <http://schema.org/name> ?name }}"},
     )
 
@@ -140,15 +140,15 @@ async def test_rdf_query_with_named_graph(client: Client, sample_graph_uri: str)
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_invalid_syntax(client: Client) -> None:
+async def test_rdf_sparql_query_invalid_syntax(client: Client) -> None:
     """Test that invalid SPARQL syntax raises an error."""
     with pytest.raises(ToolError):
-        await client.call_tool("rdf_query", {"query": "INVALID SPARQL SYNTAX"})
+        await client.call_tool("rdf_sparql_query", {"query": "INVALID SPARQL SYNTAX"})
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_only_supports_read_operations(client: Client) -> None:
-    """Test that rdf_query only supports read operations due to pyoxigraph query() API design.
+async def test_rdf_sparql_query_only_supports_read_operations(client: Client) -> None:
+    """Test that rdf_sparql_query only supports read operations due to pyoxigraph query() API design.
     
     The pyoxigraph library separates read operations (query method) from write operations 
     (update method). The query() method only accepts SELECT, ASK, CONSTRUCT, DESCRIBE 
@@ -157,30 +157,30 @@ async def test_rdf_query_only_supports_read_operations(client: Client) -> None:
     # INSERT operations require the update() method, not query() method
     with pytest.raises(ToolError) as exc_info:
         await client.call_tool(
-            "rdf_query", {"query": "INSERT DATA { <http://example.org/test> <http://example.org/prop> 'value' }"}
+            "rdf_sparql_query", {"query": "INSERT DATA { <http://example.org/test> <http://example.org/prop> 'value' }"}
         )
     error_msg = str(exc_info.value).lower()
     assert "expected construct" in error_msg or "syntax" in error_msg or "invalid" in error_msg
 
     # DELETE operations also require the update() method, not query() method
     with pytest.raises(ToolError) as exc_info:
-        await client.call_tool("rdf_query", {"query": "DELETE WHERE { ?s ?p ?o }"})
+        await client.call_tool("rdf_sparql_query", {"query": "DELETE WHERE { ?s ?p ?o }"})
     error_msg = str(exc_info.value).lower()
     assert "expected construct" in error_msg or "syntax" in error_msg or "invalid" in error_msg
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_empty_query(client: Client) -> None:
+async def test_rdf_sparql_query_empty_query(client: Client) -> None:
     """Test that empty SPARQL queries raise errors."""
     with pytest.raises(ToolError):
-        await client.call_tool("rdf_query", {"query": ""})
+        await client.call_tool("rdf_sparql_query", {"query": ""})
 
     with pytest.raises(ToolError):
-        await client.call_tool("rdf_query", {"query": "   "})
+        await client.call_tool("rdf_sparql_query", {"query": "   "})
 
 
 @pytest.mark.asyncio
-async def test_rdf_query_completely_invalid_syntax(client: Client) -> None:
+async def test_rdf_sparql_query_completely_invalid_syntax(client: Client) -> None:
     """Test various completely invalid SPARQL syntax."""
     invalid_queries = [
         "INVALID SPARQL SYNTAX",
@@ -190,4 +190,4 @@ async def test_rdf_query_completely_invalid_syntax(client: Client) -> None:
 
     for query in invalid_queries:
         with pytest.raises(ToolError):
-            await client.call_tool("rdf_query", {"query": query})
+            await client.call_tool("rdf_sparql_query", {"query": query})

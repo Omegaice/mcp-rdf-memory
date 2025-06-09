@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, Field, PlainValidator, WithJsonSchema
+from pydantic import BaseModel, Field, PlainValidator, RootModel, WithJsonSchema
 from pyoxigraph import (
     DefaultGraph,
     Literal,
@@ -23,7 +23,6 @@ from pyoxigraph import (
 store = Store()
 
 mcp = FastMCP("RDF Memory")
-
 
 def validate_rdf_identifier(value) -> str:
     """Validate and return string representation of RDF identifier."""
@@ -115,10 +114,10 @@ class QuadResult(BaseModel):
     object: str = Field(description="Object of the quad")
     graph: str = Field(description="Graph name (or 'default graph')")
 
-
 @mcp.tool()
-def add_triples(triples: list[TripleModel]) -> None:
-    """Add multiple RDF triples to the store in a single transaction."""
+def rdf_add_triples(triples: list[TripleModel]) -> None:
+    """Add RDF triples to the knowledge graph for simple batch operations.
+    Use rdf_sparql_query for complex insertions."""
     quads = []
     for triple in triples:
         # Convert validated strings to RDF objects
@@ -137,14 +136,19 @@ def add_triples(triples: list[TripleModel]) -> None:
         raise ToolError(f"Failed to store triples in RDF database: {e}") from e
 
 
+FindTriplesResult = RootModel[list[QuadResult]]
+SparqlSelectResult = RootModel[list[dict]]
+SparqlConstructResult = RootModel[list[QuadResult]]
+
 @mcp.tool()
-def quads_for_pattern(
+def rdf_find_triples(
     subject: RDFIdentifier | None = None,
     predicate: RDFIdentifier | None = None,
     object: RDFNode | None = None,
     graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"]),
-) -> list[QuadResult]:
-    """Find quads matching the given pattern. Use None for wildcards."""
+) -> FindTriplesResult:
+    """Find RDF triples matching the pattern. Use None for wildcards.
+    Use rdf_sparql_query for complex queries."""
     # Convert validated strings to RDF objects for pattern matching
     subject_node = create_rdf_identifier(subject) if subject else None
     predicate_node = create_rdf_identifier(predicate) if predicate else None
@@ -175,20 +179,20 @@ def quads_for_pattern(
             )
         )
 
-    return results
+    return FindTriplesResult(results)
 
 
 @mcp.tool()
-def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
-    """Execute a read-only SPARQL query against the RDF store.
+def rdf_sparql_query(query: str) -> bool | SparqlSelectResult | SparqlConstructResult:
+    """Execute read-only SPARQL queries for complex knowledge graph operations.
 
     Returns:
     - ASK queries: bool
-    - SELECT queries: list[dict] (variable bindings)
-    - CONSTRUCT/DESCRIBE queries: list[QuadResult]
+    - SELECT queries: SparqlSelectResult (variable bindings)
+    - CONSTRUCT/DESCRIBE queries: SparqlConstructResult
 
     Supports read operations only (SELECT, ASK, CONSTRUCT, DESCRIBE).
-    Modification operations use separate update methods not exposed as MCP tools.
+    Use rdf_add_triples for simple insertions.
     """
     # Execute the SPARQL query
     try:
@@ -217,10 +221,10 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
                 if value is not None:
                     binding[var_name] = str(value)
             solutions.append(binding)
-        return solutions
+        return SparqlSelectResult(solutions)
 
     # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
-    return [
+    construct_results = [
         QuadResult(
             subject=str(triple.subject),
             predicate=str(triple.predicate),
@@ -229,7 +233,21 @@ def rdf_query(query: str) -> bool | list[dict] | list[QuadResult]:
         )
         for triple in results
     ]
+    return SparqlConstructResult(construct_results)
 
 
-if __name__ == "__main__":
-    mcp.run()
+@mcp.tool()
+def rdf_sparql_update(update: str) -> str:
+    """Execute SPARQL UPDATE operations for complex knowledge graph modifications.
+    
+    Supports modification operations (INSERT, DELETE, etc.).
+    Use rdf_add_triples for simple insertions.
+    
+    Note: This is a placeholder function - UPDATE operations are not yet implemented.
+    """
+    # Validate that update parameter is provided (for future implementation)
+    if not update or not update.strip():
+        raise ToolError("SPARQL UPDATE query cannot be empty")
+    
+    raise ToolError("SPARQL UPDATE operations are not yet implemented. Use rdf_add_triples for simple insertions.")
+

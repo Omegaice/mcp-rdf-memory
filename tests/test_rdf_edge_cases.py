@@ -11,7 +11,7 @@ async def test_typed_literals(client: Client) -> None:
     """Test RDF typed literals like integers, dates, etc."""
     # Add typed literal
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -25,7 +25,7 @@ async def test_typed_literals(client: Client) -> None:
 
     # Query should work
     result = await client.call_tool(
-        "rdf_query", {"query": "SELECT ?age WHERE { <http://example.org/person/typed> <http://schema.org/age> ?age }"}
+        "rdf_sparql_query", {"query": "SELECT ?age WHERE { <http://example.org/person/typed> <http://schema.org/age> ?age }"}
     )
     assert len(result) == 1
 
@@ -35,7 +35,7 @@ async def test_language_tagged_literals(client: Client) -> None:
     """Test RDF language-tagged literals."""
     # Add language-tagged literals
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -54,7 +54,7 @@ async def test_language_tagged_literals(client: Client) -> None:
 
     # Query should find both
     result = await client.call_tool(
-        "rdf_query",
+        "rdf_sparql_query",
         {"query": "SELECT ?name WHERE { <http://example.org/person/multilingual> <http://schema.org/name> ?name }"},
     )
     assert len(result) == 1
@@ -72,7 +72,7 @@ async def test_unicode_content(client: Client) -> None:
 
     for i, unicode_str in enumerate(unicode_strings):
         await client.call_tool(
-            "add_triples",
+            "rdf_add_triples",
             {
                 "triples": [
                     {
@@ -85,7 +85,7 @@ async def test_unicode_content(client: Client) -> None:
         )
 
     # Query should work
-    result = await client.call_tool("rdf_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"})
+    result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"})
     assert len(result) == 1
 
 
@@ -98,7 +98,7 @@ Line 3 with 'single quotes'
 Line 4 with \\ backslash"""
 
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -111,7 +111,7 @@ Line 4 with \\ backslash"""
     )
 
     # Should be queryable
-    result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/multiline/test"})
+    result = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/multiline/test"})
     assert len(result) == 1
 
 
@@ -126,10 +126,10 @@ async def test_duplicate_triples(client: Client) -> None:
 
     # Add same triple three times
     for _ in range(3):
-        await client.call_tool("add_triples", {"triples": [triple_data]})
+        await client.call_tool("rdf_add_triples", {"triples": [triple_data]})
 
     # Should only appear once in results
-    result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/duplicate/test"})
+    result = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/duplicate/test"})
     # Note: RDF semantics may deduplicate or not - test documents behavior
     assert len(result) >= 1
 
@@ -138,7 +138,7 @@ async def test_duplicate_triples(client: Client) -> None:
 async def test_self_referential_triples(client: Client) -> None:
     """Test triples where subject equals object."""
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -151,7 +151,7 @@ async def test_self_referential_triples(client: Client) -> None:
     )
 
     # Should be queryable
-    result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/self/reference"})
+    result = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/self/reference"})
     assert len(result) == 1
 
 
@@ -159,7 +159,7 @@ async def test_self_referential_triples(client: Client) -> None:
 async def test_circular_references(client: Client) -> None:
     """Test circular reference patterns."""
     await client.call_tool(
-        "add_triples",
+        "rdf_add_triples",
         {
             "triples": [
                 {
@@ -177,8 +177,8 @@ async def test_circular_references(client: Client) -> None:
     )
 
     # Both should be queryable
-    result_alice = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/alice"})
-    result_bob = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/person/bob"})
+    result_alice = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/person/alice"})
+    result_bob = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/person/bob"})
 
     assert len(result_alice) == 1
     assert len(result_bob) == 1
@@ -195,18 +195,18 @@ async def test_cross_graph_isolation(client: Client, sample_graph_uri: str) -> N
     }
 
     # Add to default graph
-    await client.call_tool("add_triples", {"triples": [triple_data]})
+    await client.call_tool("rdf_add_triples", {"triples": [triple_data]})
 
     # Add to named graph
     triple_with_graph = {**triple_data, "graph_name": "conversation/test-123"}
-    await client.call_tool("add_triples", {"triples": [triple_with_graph]})
+    await client.call_tool("rdf_add_triples", {"triples": [triple_with_graph]})
 
     # Query default graph only
-    default_result = await client.call_tool("quads_for_pattern", {"subject": "http://example.org/isolation/test"})
+    default_result = await client.call_tool("rdf_find_triples", {"subject": "http://example.org/isolation/test"})
 
     # Query named graph only
     named_result = await client.call_tool(
-        "quads_for_pattern", {"subject": "http://example.org/isolation/test", "graph_name": "conversation/test-123"}
+        "rdf_find_triples", {"subject": "http://example.org/isolation/test", "graph_name": "conversation/test-123"}
     )
 
     # Should have data in both but separately

@@ -102,13 +102,36 @@ URI_SCHEMES = ("http://", "https://")
 ### RDF Node Handling
 **DefaultGraph Handling**: `DefaultGraph` has no `.value` attribute - handle explicitly.
 
-## LLM-Centric MCP Tool Design
+## MCP Client Real-World Constraints
 
-### Core Principles for LLM-Friendly APIs
+**CRITICAL: Desktop client limitations fundamentally impact tool design.**
+
+### Client Limitations
+- **No tool namespacing** - name collisions between MCP servers are common
+- **Tool count limits** - every tool slot is precious resource
+- **Performance constraints** - clients may limit concurrent tool usage
+
+### Tool Architecture Impact
+- **Naming Rule**: Always use `rdf_` prefix to prevent conflicts
+- **Tool count optimization**: Justify each tool's existence vs consolidation
+- **Future planning**: Design tool suite as cohesive, prefixed family
+
+## LLM-Centric Knowledge Graph Design
+
+### Core Principles for RDF LLM APIs
+- **Leverage LLM's RDF Knowledge**: Use semantic terminology, don't abstract it away
+- **Knowledge Graph Mental Model**: Encourage subjects, predicates, objects thinking
 - **Context Efficiency is Critical**: Every token in tool schemas counts
 - **Self-Documenting Parameter Names**: `graph_name` vs `graph` immediately suggests string input
 - **Examples > Descriptions**: `Field(examples=["chat-123"])` teaches usage more efficiently than paragraphs
 - **Simplicity > Technical Purity**: `"chat-123"` → `"http://mcp.local/chat-123"` internally vs requiring LLMs to construct URIs
+
+### RDF Naming Strategy
+**Principle**: Use RDF terminology that LLMs understand, not generic abstractions
+- ✅ `rdf_find_triples` - leverages LLM's RDF knowledge
+- ❌ `recall` or `search` - loses semantic context
+- ✅ Explicit parameter names: `subject`, `predicate`, `object`
+- ❌ Generic names: `query`, `value`, `data`
 
 ### Pydantic Type Strategy
 **Decision Framework**: Use Annotated types when validation complexity is justified by preventing common input errors or supporting multiple input formats. Otherwise use simple types with helper validation.
@@ -121,7 +144,67 @@ Simple string names get auto-namespaced: `"conversation/chat-123"` → `"http://
 
 **Benefits**: No URI syntax errors, natural folder-like organization, reduced cognitive load for LLMs.
 
+## Architecture Decision Record
+
+### Stateless vs Stateful Tool Design (CONFIRMED)
+**Decision**: Explicit `graph_name` parameters on every call > stateful `set_current_graph` approach
+
+**Rationale**:
+- **LLM Clarity**: No hidden state confusion
+- **Multi-graph Workflows**: Common pattern of comparing data across graphs
+- **SPARQL Compatibility**: Complex queries naturally specify graphs
+- **FastMCP Alignment**: Self-contained, debuggable tool calls
+- **Token Efficiency**: Stateful requires more total tool calls
+
+### Tool Suite Design (CONFIRMED)
+**Current Tools**:
+- `rdf_add_triples` - simple batch operations
+- `rdf_find_triples` - pattern matching (formerly `quads_for_pattern`)
+- `rdf_sparql_query` - complex read operations (formerly `rdf_query`)
+
+**Future Tools**:
+- `rdf_sparql_update` - complex write operations (INSERT, DELETE, etc.)
+
+**Benefits**: Collision-resistant naming, clear operation separation, future-scalable
+
 ## Tool Development Guidelines
+
+### FastMCP List Serialization Pattern
+**CRITICAL**: When returning lists from tools, use Pydantic RootModel to ensure consistent JSON array serialization
+
+```python
+from pydantic import RootModel
+
+# Define a RootModel for list returns
+FindTriplesResult = RootModel[list[QuadResult]]
+
+@mcp.tool()
+def rdf_find_triples(...) -> FindTriplesResult:
+    results = [...]  # Build list of QuadResult objects
+    return FindTriplesResult(results)  # Wrap in RootModel
+```
+
+**Problem**: FastMCP serializes single-item lists as objects instead of arrays without RootModel
+**Solution**: Always use `RootModel[list[T]]` for list return types
+
+### Tool Naming Pattern
+**Required**: All tools MUST use `rdf_` prefix to prevent client conflicts
+
+```python
+@mcp.tool()
+def rdf_add_triples(...):
+    """Add RDF triples to the knowledge graph for simple batch operations.
+    Use rdf_sparql_query for complex insertions."""
+
+@mcp.tool()
+def rdf_find_triples(...):
+    """Find RDF triples matching the pattern. Use None for wildcards.
+    Use rdf_sparql_query for complex queries."""
+
+@mcp.tool()
+def rdf_sparql_query(...):
+    """Execute read-only SPARQL queries for complex knowledge graph operations."""
+```
 
 ### Function Structure Pattern
 ```python
@@ -165,6 +248,18 @@ content = result[0]; assert isinstance(content, TextContent)
 raw_json = json.loads(content.text); assert isinstance(raw_json, list)
 validated_objects = [ModelClass(**item) for item in raw_json]
 ```
+
+### Pattern Matching Tool Testing
+**CRITICAL**: Pattern tools require comprehensive parameter combination testing
+
+**Required Test Coverage**:
+- **Single parameters**: `subject` only, `predicate` only, `object` only
+- **Parameter pairs**: `subject+object`, `subject+predicate`, `predicate+object`
+- **With graph_name**: All above combinations + `graph_name`
+- **Wildcard scenarios**: All None, empty dict input
+- **Edge cases**: Invalid identifiers, Unicode data, no matches
+
+**Rationale**: LLMs use diverse query patterns for knowledge graph exploration. Missing combinations indicate untested real-world usage patterns.
 
 **Testing Documentation**: `docs/project/testing/` - Start with README.md for navigation and quick reference
 
