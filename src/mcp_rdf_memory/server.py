@@ -19,10 +19,14 @@ from pyoxigraph import (
     Store,
 )
 
+# Constants
+MCP_NAMESPACE = "http://mcp.local/"
+
 # Create in-memory RDF store
 store = Store()
 
 mcp = FastMCP("RDF Memory")
+
 
 def validate_rdf_identifier(value) -> str:
     """Validate and return string representation of RDF identifier."""
@@ -59,11 +63,6 @@ def validate_rdf_node(value) -> str:
 
 
 # Helper functions to convert validated strings back to RDF objects
-def create_rdf_identifier(value: str) -> NamedNode:
-    """Convert validated string to NamedNode."""
-    return NamedNode(value)
-
-
 def create_rdf_node(value: str) -> NamedNode | Literal:
     """Convert validated string to appropriate RDF node type."""
     try:
@@ -95,8 +94,6 @@ RDFNode = Annotated[
 ]
 
 
-
-
 class TripleModel(BaseModel):
     """Model for a single RDF triple."""
 
@@ -114,6 +111,7 @@ class QuadResult(BaseModel):
     object: str = Field(description="Object of the quad")
     graph: str = Field(description="Graph name (or 'default graph')")
 
+
 @mcp.tool()
 def rdf_add_triples(triples: list[TripleModel]) -> None:
     """Add RDF triples to the knowledge graph for simple batch operations.
@@ -121,8 +119,8 @@ def rdf_add_triples(triples: list[TripleModel]) -> None:
     quads = []
     for triple in triples:
         # Convert validated strings to RDF objects
-        subject_node = create_rdf_identifier(triple.subject)
-        predicate_node = create_rdf_identifier(triple.predicate)
+        subject_node = NamedNode(triple.subject)
+        predicate_node = NamedNode(triple.predicate)
         object_node = create_rdf_node(triple.object)
         graph_node = create_graph_uri(triple.graph_name)
 
@@ -140,6 +138,7 @@ FindTriplesResult = RootModel[list[QuadResult]]
 SparqlSelectResult = RootModel[list[dict]]
 SparqlConstructResult = RootModel[list[QuadResult]]
 
+
 @mcp.tool()
 def rdf_find_triples(
     subject: RDFIdentifier | None = None,
@@ -150,8 +149,8 @@ def rdf_find_triples(
     """Find RDF triples matching the pattern. Use None for wildcards.
     Use rdf_sparql_query for complex queries."""
     # Convert validated strings to RDF objects for pattern matching
-    subject_node = create_rdf_identifier(subject) if subject else None
-    predicate_node = create_rdf_identifier(predicate) if predicate else None
+    subject_node = NamedNode(subject) if subject else None
+    predicate_node = NamedNode(predicate) if predicate else None
     object_node = create_rdf_node(object) if object else None
     graph_node = create_graph_uri(graph_name)
 
@@ -234,20 +233,3 @@ def rdf_sparql_query(query: str) -> bool | SparqlSelectResult | SparqlConstructR
         for triple in results
     ]
     return SparqlConstructResult(construct_results)
-
-
-@mcp.tool()
-def rdf_sparql_update(update: str) -> str:
-    """Execute SPARQL UPDATE operations for complex knowledge graph modifications.
-    
-    Supports modification operations (INSERT, DELETE, etc.).
-    Use rdf_add_triples for simple insertions.
-    
-    Note: This is a placeholder function - UPDATE operations are not yet implemented.
-    """
-    # Validate that update parameter is provided (for future implementation)
-    if not update or not update.strip():
-        raise ToolError("SPARQL UPDATE query cannot be empty")
-    
-    raise ToolError("SPARQL UPDATE operations are not yet implemented. Use rdf_add_triples for simple insertions.")
-
