@@ -25,7 +25,8 @@ async def test_typed_literals(client: Client) -> None:
 
     # Query should work
     result = await client.call_tool(
-        "rdf_sparql_query", {"query": "SELECT ?age WHERE { <http://example.org/person/typed> <http://schema.org/age> ?age }"}
+        "rdf_sparql_query",
+        {"query": "SELECT ?age WHERE { <http://example.org/person/typed> <http://schema.org/age> ?age }"},
     )
     assert len(result) == 1
 
@@ -85,7 +86,9 @@ async def test_unicode_content(client: Client) -> None:
         )
 
     # Query should work
-    result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"})
+    result = await client.call_tool(
+        "rdf_sparql_query", {"query": "SELECT ?name WHERE { ?s <http://schema.org/name> ?name }"}
+    )
     assert len(result) == 1
 
 

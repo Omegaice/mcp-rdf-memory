@@ -149,9 +149,9 @@ async def test_rdf_sparql_query_invalid_syntax(client: Client) -> None:
 @pytest.mark.asyncio
 async def test_rdf_sparql_query_only_supports_read_operations(client: Client) -> None:
     """Test that rdf_sparql_query only supports read operations due to pyoxigraph query() API design.
-    
-    The pyoxigraph library separates read operations (query method) from write operations 
-    (update method). The query() method only accepts SELECT, ASK, CONSTRUCT, DESCRIBE 
+
+    The pyoxigraph library separates read operations (query method) from write operations
+    (update method). The query() method only accepts SELECT, ASK, CONSTRUCT, DESCRIBE
     and rejects modification operations with syntax errors.
     """
     # INSERT operations require the update() method, not query() method

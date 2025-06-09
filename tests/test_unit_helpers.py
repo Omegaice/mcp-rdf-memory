@@ -64,9 +64,9 @@ class TestCreateGraphUri:
     def test_whitespace_only_raises_tool_error(self) -> None:
         """Test that whitespace-only strings raise ToolError."""
         whitespace_cases = [
-            "   ",      # spaces
-            "\t\t",    # tabs
-            "\n\n",    # newlines
+            "   ",  # spaces
+            "\t\t",  # tabs
+            "\n\n",  # newlines
             " \t\n ",  # mixed whitespace
         ]
 
@@ -111,5 +111,3 @@ class TestCreateGraphUri:
         result = create_graph_uri(long_name)
         assert isinstance(result, NamedNode)
         assert result.value == f"http://mcp.local/{long_name}"
-
-

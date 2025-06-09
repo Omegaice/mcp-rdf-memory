@@ -171,8 +171,8 @@ async def test_rdf_find_triples_no_matches(client: Client) -> None:
     assert isinstance(result, list)
     assert len(result) == 1
     assert isinstance(result[0], TextContent)
-    
-    # Validate JSON structure 
+
+    # Validate JSON structure
     quads_data = json.loads(result[0].text)
     assert isinstance(quads_data, list)
     assert len(quads_data) == 0

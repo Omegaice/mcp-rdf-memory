@@ -382,7 +382,8 @@ async def test_batch_operations_consistency(client: Client) -> None:
 
     # Verify all data was added with JSON validation
     all_names = await client.call_tool(
-        "rdf_sparql_query", {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"}
+        "rdf_sparql_query",
+        {"query": "SELECT (COUNT(?name) AS ?count) WHERE { ?person <http://schema.org/name> ?name }"},
     )
     assert len(all_names) == 1
     count_content = all_names[0]
@@ -517,11 +518,11 @@ async def test_empty_results_serialization(client: Client) -> None:
     # Query for non-existent data
     empty_result = await client.call_tool("rdf_find_triples", {"subject": "http://nonexistent.example.org/test"})
 
-    # Empty results now return empty JSON array (wrapped in TextContent) 
+    # Empty results now return empty JSON array (wrapped in TextContent)
     assert isinstance(empty_result, list)
     assert len(empty_result) == 1
     assert isinstance(empty_result[0], TextContent)
-    
+
     # Validate JSON structure
     empty_data = json.loads(empty_result[0].text)
     assert isinstance(empty_data, list)
