@@ -7,7 +7,7 @@ Model Context Protocol server providing RDF triple store capabilities to LLMs th
 from typing import Annotated
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
+from fastmcp.exceptions import ResourceError, ToolError
 from pydantic import BaseModel, Field, PlainValidator, RootModel, WithJsonSchema
 from pyoxigraph import (
     DefaultGraph,
@@ -16,6 +16,7 @@ from pyoxigraph import (
     Quad,
     QueryBoolean,
     QuerySolutions,
+    RdfFormat,
     Store,
 )
 
@@ -25,16 +26,17 @@ MCP_NAMESPACE = "http://mcp.local/"
 # Create in-memory RDF store
 store = Store()
 
-mcp = FastMCP("RDF Memory")
+# Prefix storage
+global_prefixes: dict[str, str] = {}
+graph_prefixes: dict[str, dict[str, str]] = {}
+
+mcp = FastMCP("RDF Memory")  # type: ignore[var-annotated]
 
 
-def validate_rdf_identifier(value) -> str:
+def validate_rdf_identifier(value: str | NamedNode) -> str:
     """Validate and return string representation of RDF identifier."""
     if isinstance(value, NamedNode):
         return value.value
-
-    if not isinstance(value, str):
-        raise ValueError("RDF identifier must be a string")
 
     if not value or value.isspace():
         raise ValueError("RDF identifier cannot be empty or whitespace-only")
@@ -47,19 +49,32 @@ def validate_rdf_identifier(value) -> str:
         raise ValueError(f"Invalid RDF identifier: {e}") from e
 
 
-def validate_rdf_node(value) -> str:
+def validate_rdf_node(value: str | NamedNode | Literal) -> str:
     """Validate and return string representation of RDF node."""
     if isinstance(value, NamedNode | Literal):
         return value.value
-
-    if not isinstance(value, str):
-        raise ValueError("RDF node must be a string")
 
     if not value or value.isspace():
         raise ValueError("RDF node value cannot be empty")
 
     # All strings are valid as RDF nodes (either identifiers or literals)
     return value
+
+
+def validate_prefix(prefix: str) -> str:
+    """Validate RDF prefix format."""
+    if not prefix or prefix.isspace():
+        raise ValueError("Prefix cannot be empty or whitespace-only")
+
+    # Prefix should not contain colons (that's for CURIEs)
+    if ":" in prefix:
+        raise ValueError("Prefix should not contain colons")
+
+    # Should be a valid identifier pattern
+    if not prefix.replace("_", "a").replace("-", "a").isalnum():
+        raise ValueError("Prefix must contain only letters, numbers, hyphens, and underscores")
+
+    return prefix.strip()
 
 
 # Helper functions to convert validated strings back to RDF objects
@@ -73,10 +88,8 @@ def create_rdf_node(value: str) -> NamedNode | Literal:
 
 def create_graph_uri(graph_name: str | None) -> NamedNode | None:
     """Convert simple graph name to namespaced URI."""
-    if graph_name is None:
+    if graph_name is None or not graph_name.strip():
         return None
-    if not graph_name.strip():
-        raise ToolError("Graph name cannot be empty")
     return NamedNode(f"http://mcp.local/{graph_name.strip()}")
 
 
@@ -113,6 +126,64 @@ class QuadResult(BaseModel):
 
 
 @mcp.tool()
+def rdf_define_prefix(prefix: str, namespace_uri: str | None = None, graph_name: str | None = None) -> None:
+    """Define or remove RDF namespace prefix for SPARQL queries.
+
+    Provide namespace_uri to define a prefix.
+    Provide graph_name for graph-specific prefixes."""
+    try:
+        # Validate prefix format
+        validated_prefix = validate_prefix(prefix)
+
+        # Handle prefix removal
+        if namespace_uri is None:
+            _remove_prefix(validated_prefix, graph_name)
+            return
+
+        # Handle prefix definition/update
+        # Validate namespace URI
+        try:
+            NamedNode(namespace_uri)
+        except ValueError as e:
+            raise ToolError(f"Invalid namespace URI: {e}") from e
+
+        _define_prefix(validated_prefix, namespace_uri, graph_name)
+
+    except ValueError as e:
+        raise ToolError(f"Invalid prefix: {e}") from e
+    except Exception as e:
+        raise ToolError(f"Failed to define prefix: {e}") from e
+
+
+def _remove_prefix(prefix: str, graph_name: str | None) -> None:
+    """Remove a prefix from global or graph-specific storage."""
+    if graph_name is None:
+        global_prefixes.pop(prefix, None)
+        return
+
+    # Remove from graph-specific prefixes
+    if graph_name not in graph_prefixes:
+        return
+
+    graph_prefixes[graph_name].pop(prefix, None)
+    # Clean up empty graph prefix dict
+    if not graph_prefixes[graph_name]:
+        del graph_prefixes[graph_name]
+
+
+def _define_prefix(prefix: str, namespace_uri: str, graph_name: str | None) -> None:
+    """Define a prefix in global or graph-specific storage."""
+    if graph_name is None:
+        global_prefixes[prefix] = namespace_uri
+        return
+
+    # Set graph-specific prefix
+    if graph_name not in graph_prefixes:
+        graph_prefixes[graph_name] = {}
+    graph_prefixes[graph_name][prefix] = namespace_uri
+
+
+@mcp.tool()
 def rdf_add_triples(triples: list[TripleModel]) -> None:
     """Add RDF triples to the knowledge graph for simple batch operations.
     Use rdf_sparql_query for complex insertions."""
@@ -135,7 +206,7 @@ def rdf_add_triples(triples: list[TripleModel]) -> None:
 
 
 FindTriplesResult = RootModel[list[QuadResult]]
-SparqlSelectResult = RootModel[list[dict]]
+SparqlSelectResult = RootModel[list[dict[str, str]]]
 SparqlConstructResult = RootModel[list[QuadResult]]
 
 
@@ -233,3 +304,49 @@ def rdf_sparql_query(query: str) -> bool | SparqlSelectResult | SparqlConstructR
         for triple in results
     ]
     return SparqlConstructResult(construct_results)
+
+
+@mcp.resource(uri="rdf://graph", mime_type="application/n-quads")
+def export_all_graphs() -> str:
+    """Export all RDF data from the triple store in N-Quads format."""
+
+    # Should not return None because we are not setting output
+    # Should not raise an exception because we are using a format that supports named graphs
+    serialized = store.dump(format=RdfFormat.N_QUADS, from_graph=None)
+    assert serialized is not None
+
+    try:
+        return serialized.decode("utf-8")
+    except Exception as e:
+        raise ResourceError(f"Failed to export RDF data: {e}") from e
+
+
+@mcp.resource(uri="rdf://graph/{graph_name}", mime_type="application/n-triples")
+def export_named_graph(graph_name: str) -> str:
+    """Export a specific named graph in N-Triples format."""
+    try:
+        # Convert graph name to URI
+        graph_uri = create_graph_uri(graph_name)
+
+        # Export specific graph in N-Quads format
+        serialized = store.dump(format=RdfFormat.N_TRIPLES, from_graph=graph_uri)
+        assert serialized is not None
+
+        return serialized.decode("utf-8")
+    except Exception as e:
+        raise ResourceError(f"Failed to export graph '{graph_name}': {e}") from e
+
+
+@mcp.resource(uri="rdf://graph/prefix", mime_type="application/json")
+def export_global_prefixes() -> dict[str, str]:
+    """Export global RDF prefix definitions."""
+    return global_prefixes
+
+
+@mcp.resource(uri="rdf://graph/{graph_name}/prefix", mime_type="application/json")
+def export_graph_prefixes(graph_name: str) -> dict[str, str]:
+    """Export effective prefixes for specific graph (global + graph-specific)."""
+    effective_prefixes = global_prefixes.copy()
+    if graph_name in graph_prefixes:
+        effective_prefixes.update(graph_prefixes[graph_name])
+    return effective_prefixes
