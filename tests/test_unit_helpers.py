@@ -52,14 +52,10 @@ class TestCreateGraphUri:
             assert isinstance(result, NamedNode)
             assert result.value == expected_uri
 
-    def test_empty_string_raises_tool_error(self) -> None:
-        """Test that empty string raises ToolError with helpful message."""
-        with pytest.raises(ToolError) as exc_info:
-            create_graph_uri("")
-
-        error_msg = str(exc_info.value)
-        assert "empty" in error_msg.lower()
-        assert "graph name" in error_msg.lower()
+    def test_empty_string_returns_none(self) -> None:
+        """Test that empty string returns None (default graph)."""
+        result = create_graph_uri("")
+        assert result is None
 
     def test_whitespace_only_raises_tool_error(self) -> None:
         """Test that whitespace-only strings raise ToolError."""
@@ -75,7 +71,7 @@ class TestCreateGraphUri:
                 create_graph_uri(whitespace_input)
 
             error_msg = str(exc_info.value)
-            assert "empty" in error_msg.lower()
+            assert "whitespace-only" in error_msg.lower()
             assert "graph name" in error_msg.lower()
 
     def test_special_characters_in_graph_names(self) -> None:

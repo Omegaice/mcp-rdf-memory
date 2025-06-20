@@ -24,9 +24,9 @@ def assert_quad_in_content(content: str, subject: str, predicate: str, obj: str,
     """Assert that a specific quad exists in N-Quads content."""
     __tracebackhide__ = True
     if graph:
-        expected_quad = f"<{subject}> <{predicate}> \"{obj}\" <{graph}> ."
+        expected_quad = f'<{subject}> <{predicate}> "{obj}" <{graph}> .'
     else:
-        expected_quad = f"<{subject}> <{predicate}> \"{obj}\" ."
+        expected_quad = f'<{subject}> <{predicate}> "{obj}" .'
     assert expected_quad in content, f"Expected quad not found: {expected_quad}"
 
 
@@ -83,7 +83,9 @@ async def test_export_with_data(client: Client):
 
     # Check that both quads are present with correct format
     assert_quad_in_content(content, "http://example.org/alice", "http://xmlns.com/foaf/0.1/name", "Alice")
-    assert_quad_in_content(content, "http://example.org/bob", "http://xmlns.com/foaf/0.1/name", "Bob", "http://mcp.local/people")
+    assert_quad_in_content(
+        content, "http://example.org/bob", "http://xmlns.com/foaf/0.1/name", "Bob", "http://mcp.local/people"
+    )
 
 
 @pytest.mark.asyncio
@@ -157,8 +159,12 @@ async def test_export_multiple_graphs(client: Client):
 
     # Check all quads are present with correct format
     assert_quad_in_content(content, "http://example.org/default", "http://example.org/in", "default graph")
-    assert_quad_in_content(content, "http://example.org/graph1", "http://example.org/in", "graph 1", "http://mcp.local/graph1")
-    assert_quad_in_content(content, "http://example.org/graph2", "http://example.org/in", "graph 2", "http://mcp.local/graph2")
+    assert_quad_in_content(
+        content, "http://example.org/graph1", "http://example.org/in", "graph 1", "http://mcp.local/graph1"
+    )
+    assert_quad_in_content(
+        content, "http://example.org/graph2", "http://example.org/in", "graph 2", "http://mcp.local/graph2"
+    )
 
     # Verify N-Quads format
     lines = content.strip().split("\n")

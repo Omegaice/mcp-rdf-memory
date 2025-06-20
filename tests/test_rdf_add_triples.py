@@ -212,7 +212,7 @@ async def test_rdf_add_triples_missing_fields(client: Client) -> None:
 
 @pytest.mark.asyncio
 async def test_rdf_add_triples_invalid_graph_uri(client: Client) -> None:
-    """Test that invalid graph URIs raise errors."""
+    """Test that whitespace-only graph names raise errors."""
     with pytest.raises(ToolError):
         await client.call_tool(
             "rdf_add_triples",
@@ -222,7 +222,7 @@ async def test_rdf_add_triples_invalid_graph_uri(client: Client) -> None:
                         "subject": "http://example.org/test",
                         "predicate": "http://schema.org/name",
                         "object": "Test",
-                        "graph_name": "",  # Empty graph URI
+                        "graph_name": "   ",  # Whitespace-only graph name
                     }
                 ]
             },

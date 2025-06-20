@@ -6,18 +6,19 @@ from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 
-from mcp_rdf_memory.server import global_prefixes, graph_prefixes, mcp, store
+from mcp_rdf_memory.server import RDFMemoryServer, register_mcp_server
 
 
 @pytest_asyncio.fixture
 async def client() -> AsyncGenerator[Client, None]:
     """Provide a FastMCP client for testing."""
-    # Clear the store and prefix storage before each test
-    store.clear()
-    global_prefixes.clear()
-    graph_prefixes.clear()
+    # Create fresh in-memory server instance for each test
+    server = RDFMemoryServer(store_path=None)  # In-memory store
+    mcp = FastMCP("RDF Memory Test")
+    register_mcp_server(server, mcp)
+
     async with Client(mcp) as client:
         yield client
 

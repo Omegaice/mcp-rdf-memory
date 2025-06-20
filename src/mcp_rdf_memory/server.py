@@ -20,17 +20,10 @@ from pyoxigraph import (
     Store,
 )
 
+from .store_manager import StoreManager
+
 # Constants
 MCP_NAMESPACE = "http://mcp.local/"
-
-# Create in-memory RDF store
-store = Store()
-
-# Prefix storage
-global_prefixes: dict[str, str] = {}
-graph_prefixes: dict[str, dict[str, str]] = {}
-
-mcp = FastMCP("RDF Memory")  # type: ignore[var-annotated]
 
 
 def validate_rdf_identifier(value: str | NamedNode) -> str:
@@ -88,8 +81,10 @@ def create_rdf_node(value: str) -> NamedNode | Literal:
 
 def create_graph_uri(graph_name: str | None) -> NamedNode | None:
     """Convert simple graph name to namespaced URI."""
-    if graph_name is None or not graph_name.strip():
+    if graph_name is None or graph_name == "":
         return None
+    if not graph_name.strip():
+        raise ToolError("Graph name cannot be whitespace-only")
     return NamedNode(f"http://mcp.local/{graph_name.strip()}")
 
 
@@ -125,228 +120,253 @@ class QuadResult(BaseModel):
     graph: str = Field(description="Graph name (or 'default graph')")
 
 
-@mcp.tool()
-def rdf_define_prefix(prefix: str, namespace_uri: str | None = None, graph_name: str | None = None) -> None:
-    """Define or remove RDF namespace prefix for SPARQL queries.
-
-    Provide namespace_uri to define a prefix.
-    Provide graph_name for graph-specific prefixes."""
-    try:
-        # Validate prefix format
-        validated_prefix = validate_prefix(prefix)
-
-        # Handle prefix removal
-        if namespace_uri is None:
-            _remove_prefix(validated_prefix, graph_name)
-            return
-
-        # Handle prefix definition/update
-        # Validate namespace URI
-        try:
-            NamedNode(namespace_uri)
-        except ValueError as e:
-            raise ToolError(f"Invalid namespace URI: {e}") from e
-
-        _define_prefix(validated_prefix, namespace_uri, graph_name)
-
-    except ValueError as e:
-        raise ToolError(f"Invalid prefix: {e}") from e
-    except Exception as e:
-        raise ToolError(f"Failed to define prefix: {e}") from e
-
-
-def _remove_prefix(prefix: str, graph_name: str | None) -> None:
-    """Remove a prefix from global or graph-specific storage."""
-    if graph_name is None:
-        global_prefixes.pop(prefix, None)
-        return
-
-    # Remove from graph-specific prefixes
-    if graph_name not in graph_prefixes:
-        return
-
-    graph_prefixes[graph_name].pop(prefix, None)
-    # Clean up empty graph prefix dict
-    if not graph_prefixes[graph_name]:
-        del graph_prefixes[graph_name]
-
-
-def _define_prefix(prefix: str, namespace_uri: str, graph_name: str | None) -> None:
-    """Define a prefix in global or graph-specific storage."""
-    if graph_name is None:
-        global_prefixes[prefix] = namespace_uri
-        return
-
-    # Set graph-specific prefix
-    if graph_name not in graph_prefixes:
-        graph_prefixes[graph_name] = {}
-    graph_prefixes[graph_name][prefix] = namespace_uri
-
-
-@mcp.tool()
-def rdf_add_triples(triples: list[TripleModel]) -> None:
-    """Add RDF triples to the knowledge graph for simple batch operations.
-    Use rdf_sparql_query for complex insertions."""
-    quads = []
-    for triple in triples:
-        # Convert validated strings to RDF objects
-        subject_node = NamedNode(triple.subject)
-        predicate_node = NamedNode(triple.predicate)
-        object_node = create_rdf_node(triple.object)
-        graph_node = create_graph_uri(triple.graph_name)
-
-        quad = Quad(subject_node, predicate_node, object_node, graph_node)
-        quads.append(quad)
-
-    # Add all quads in a single transaction
-    try:
-        store.extend(quads)
-    except Exception as e:
-        raise ToolError(f"Failed to store triples in RDF database: {e}") from e
-
-
+# Result type definitions
 FindTriplesResult = RootModel[list[QuadResult]]
 SparqlSelectResult = RootModel[list[dict[str, str]]]
 SparqlConstructResult = RootModel[list[QuadResult]]
 
 
-@mcp.tool()
-def rdf_find_triples(
-    subject: RDFIdentifier | None = None,
-    predicate: RDFIdentifier | None = None,
-    object: RDFNode | None = None,
-    graph_name: str | None = Field(default=None, examples=["chat-123", "project/myapp"]),
-) -> FindTriplesResult:
-    """Find RDF triples matching the pattern. Use None for wildcards.
-    Use rdf_sparql_query for complex queries."""
-    # Convert validated strings to RDF objects for pattern matching
-    subject_node = NamedNode(subject) if subject else None
-    predicate_node = NamedNode(predicate) if predicate else None
-    object_node = create_rdf_node(object) if object else None
-    graph_node = create_graph_uri(graph_name)
+class RDFMemoryServer:
+    """RDF Memory server providing triple store capabilities with optional persistence."""
 
-    # Query the store for matching quads
-    try:
-        quads = store.quads_for_pattern(subject_node, predicate_node, object_node, graph_node)
-    except Exception as e:
-        raise ToolError(f"Failed to execute pattern query against RDF store: {e}") from e
+    def __init__(self, store_path: str | None = None) -> None:
+        """Initialize RDF Memory server with optional persistent storage.
 
-    # Convert to structured results
-    results = []
-    for quad in quads:
-        # Format graph name
-        if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
-            graph_name = "default graph"
-        else:
-            graph_name = quad.graph_name.value
+        Args:
+            store_path: Path for persistent storage. If None, creates in-memory store.
+        """
+        self.store_path = store_path  # Keep for backward compatibility
+        self.store_manager = StoreManager(store_path)
 
-        results.append(
-            QuadResult(
-                subject=str(quad.subject),
-                predicate=str(quad.predicate),
-                object=str(quad.object),
-                graph=graph_name,
+        # Initialize prefix storage
+        self.global_prefixes: dict[str, str] = {}
+        self.graph_prefixes: dict[str, dict[str, str]] = {}
+
+    @property
+    def store(self) -> Store | None:
+        """Access to store for backward compatibility. Only available for in-memory stores."""
+        return self.store_manager.store
+
+    def _remove_prefix(self, prefix: str, graph_name: str | None) -> None:
+        """Remove a prefix from global or graph-specific storage."""
+        if graph_name is None:
+            self.global_prefixes.pop(prefix, None)
+            return
+
+        # Remove from graph-specific prefixes
+        if graph_name not in self.graph_prefixes:
+            return
+
+        self.graph_prefixes[graph_name].pop(prefix, None)
+        # Clean up empty graph prefix dict
+        if not self.graph_prefixes[graph_name]:
+            del self.graph_prefixes[graph_name]
+
+    def _define_prefix(self, prefix: str, namespace_uri: str, graph_name: str | None) -> None:
+        """Define a prefix in global or graph-specific storage."""
+        if graph_name is None:
+            self.global_prefixes[prefix] = namespace_uri
+            return
+
+        # Set graph-specific prefix
+        if graph_name not in self.graph_prefixes:
+            self.graph_prefixes[graph_name] = {}
+        self.graph_prefixes[graph_name][prefix] = namespace_uri
+
+    def rdf_define_prefix(self, prefix: str, namespace_uri: str | None = None, graph_name: str | None = None) -> None:
+        """Define or remove RDF namespace prefix for SPARQL queries.
+
+        Provide namespace_uri to define a prefix.
+        Provide graph_name for graph-specific prefixes."""
+        try:
+            # Validate prefix format
+            validated_prefix = validate_prefix(prefix)
+
+            # Handle prefix removal
+            if namespace_uri is None:
+                self._remove_prefix(validated_prefix, graph_name)
+                return
+
+            # Handle prefix definition/update
+            # Validate namespace URI
+            try:
+                NamedNode(namespace_uri)
+            except ValueError as e:
+                raise ToolError(f"Invalid namespace URI: {e}") from e
+
+            self._define_prefix(validated_prefix, namespace_uri, graph_name)
+
+        except ValueError as e:
+            raise ToolError(f"Invalid prefix: {e}") from e
+        except Exception as e:
+            raise ToolError(f"Failed to define prefix: {e}") from e
+
+    def rdf_add_triples(self, triples: list[TripleModel]) -> None:
+        """Add RDF triples to the knowledge graph for simple batch operations.
+        Use rdf_sparql_query for complex insertions."""
+        quads = []
+        for triple in triples:
+            # Convert validated strings to RDF objects
+            subject_node = NamedNode(triple.subject)
+            predicate_node = NamedNode(triple.predicate)
+            object_node = create_rdf_node(triple.object)
+            graph_node = create_graph_uri(triple.graph_name)
+
+            quad = Quad(subject_node, predicate_node, object_node, graph_node)
+            quads.append(quad)
+
+        # Add all quads in a single transaction
+        try:
+            with self.store_manager.get_store(read_only=False) as store:
+                store.extend(quads)
+                store.flush()  # Ensure data is written to disk
+        except Exception as e:
+            raise ToolError(f"Failed to store triples in RDF database: {e}") from e
+
+    def rdf_find_triples(
+        self,
+        subject: RDFIdentifier | None = None,
+        predicate: RDFIdentifier | None = None,
+        object: RDFNode | None = None,
+        graph_name: str | None = None,
+    ) -> FindTriplesResult:
+        """Find RDF triples matching the pattern. Use None for wildcards.
+        Use rdf_sparql_query for complex queries."""
+        # Convert validated strings to RDF objects for pattern matching
+        subject_node = NamedNode(subject) if subject else None
+        predicate_node = NamedNode(predicate) if predicate else None
+        object_node = create_rdf_node(object) if object else None
+        graph_node = create_graph_uri(graph_name)
+
+        # Query the store for matching quads
+        try:
+            with self.store_manager.get_store(read_only=True) as store:
+                quads = store.quads_for_pattern(subject_node, predicate_node, object_node, graph_node)
+        except Exception as e:
+            raise ToolError(f"Failed to execute pattern query against RDF store: {e}") from e
+
+        # Convert to structured results
+        results = []
+        for quad in quads:
+            # Format graph name
+            if quad.graph_name is None or isinstance(quad.graph_name, DefaultGraph):
+                graph_name = "default graph"
+            else:
+                graph_name = quad.graph_name.value
+
+            results.append(
+                QuadResult(
+                    subject=str(quad.subject),
+                    predicate=str(quad.predicate),
+                    object=str(quad.object),
+                    graph=graph_name,
+                )
             )
-        )
 
-    return FindTriplesResult(results)
+        return FindTriplesResult(results)
+
+    def rdf_sparql_query(self, query: str) -> bool | SparqlSelectResult | SparqlConstructResult:
+        """Execute read-only SPARQL queries for complex knowledge graph operations.
+
+        Returns:
+        - ASK queries: bool
+        - SELECT queries: SparqlSelectResult (variable bindings)
+        - CONSTRUCT/DESCRIBE queries: SparqlConstructResult
+
+        Supports read operations only (SELECT, ASK, CONSTRUCT, DESCRIBE).
+        Use rdf_add_triples for simple insertions.
+        """
+        # Execute the SPARQL query
+        try:
+            with self.store_manager.get_store(read_only=True) as store:
+                results = store.query(query)
+        except ValueError as e:
+            raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
+        except Exception as e:
+            raise ToolError(f"Failed to execute SPARQL query against RDF store: {e}") from e
+
+        # Return results based on query type
+
+        # ASK query returns QueryBoolean
+        if isinstance(results, QueryBoolean):
+            return bool(results)
+
+        # SELECT query returns QuerySolutions - convert to list of dicts
+        if isinstance(results, QuerySolutions):
+            solutions = []
+            variables = results.variables
+            for solution in results:
+                binding = {}
+                # Access each variable by name
+                for var in variables:
+                    var_name = var.value  # Get variable name without ? prefix
+                    value = solution[var_name]
+                    if value is not None:
+                        binding[var_name] = str(value)
+                solutions.append(binding)
+            return SparqlSelectResult(solutions)
+
+        # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
+        construct_results = [
+            QuadResult(
+                subject=str(triple.subject),
+                predicate=str(triple.predicate),
+                object=str(triple.object),
+                graph="default graph",  # Triples from CONSTRUCT/DESCRIBE don't have explicit graphs
+            )
+            for triple in results
+        ]
+        return SparqlConstructResult(construct_results)
+
+    def export_all_graphs(self) -> str:
+        """Export all RDF data from the triple store in N-Quads format."""
+        # Should not return None because we are not setting output
+        # Should not raise an exception because we are using a format that supports named graphs
+        try:
+            with self.store_manager.get_store(read_only=True) as store:
+                serialized = store.dump(format=RdfFormat.N_QUADS, from_graph=None)
+                assert serialized is not None
+                return serialized.decode("utf-8")
+        except Exception as e:
+            raise ResourceError(f"Failed to export RDF data: {e}") from e
+
+    def export_named_graph(self, graph_name: str) -> str:
+        """Export a specific named graph in N-Triples format."""
+        try:
+            # Convert graph name to URI
+            graph_uri = create_graph_uri(graph_name)
+
+            # Export specific graph in N-Quads format
+            with self.store_manager.get_store(read_only=True) as store:
+                serialized = store.dump(format=RdfFormat.N_TRIPLES, from_graph=graph_uri)
+                assert serialized is not None
+
+                return serialized.decode("utf-8")
+        except Exception as e:
+            raise ResourceError(f"Failed to export graph '{graph_name}': {e}") from e
+
+    def export_global_prefixes(self) -> dict[str, str]:
+        """Export global RDF prefix definitions."""
+        return self.global_prefixes
+
+    def export_graph_prefixes(self, graph_name: str) -> dict[str, str]:
+        """Export effective prefixes for specific graph (global + graph-specific)."""
+        effective_prefixes = self.global_prefixes.copy()
+        if graph_name in self.graph_prefixes:
+            effective_prefixes.update(self.graph_prefixes[graph_name])
+        return effective_prefixes
 
 
-@mcp.tool()
-def rdf_sparql_query(query: str) -> bool | SparqlSelectResult | SparqlConstructResult:
-    """Execute read-only SPARQL queries for complex knowledge graph operations.
+def register_mcp_server(server: RDFMemoryServer, mcp: FastMCP) -> None:
+    """Register RDFMemoryServer methods with FastMCP instance."""
+    # Register tools
+    mcp.tool(server.rdf_define_prefix)
+    mcp.tool(server.rdf_add_triples)
+    mcp.tool(server.rdf_find_triples)
+    mcp.tool(server.rdf_sparql_query)
 
-    Returns:
-    - ASK queries: bool
-    - SELECT queries: SparqlSelectResult (variable bindings)
-    - CONSTRUCT/DESCRIBE queries: SparqlConstructResult
-
-    Supports read operations only (SELECT, ASK, CONSTRUCT, DESCRIBE).
-    Use rdf_add_triples for simple insertions.
-    """
-    # Execute the SPARQL query
-    try:
-        results = store.query(query)
-    except ValueError as e:
-        raise ToolError(f"Invalid SPARQL query syntax: {e}") from e
-    except Exception as e:
-        raise ToolError(f"Failed to execute SPARQL query against RDF store: {e}") from e
-
-    # Return results based on query type
-
-    # ASK query returns QueryBoolean
-    if isinstance(results, QueryBoolean):
-        return bool(results)
-
-    # SELECT query returns QuerySolutions - convert to list of dicts
-    if isinstance(results, QuerySolutions):
-        solutions = []
-        variables = results.variables
-        for solution in results:
-            binding = {}
-            # Access each variable by name
-            for var in variables:
-                var_name = var.value  # Get variable name without ? prefix
-                value = solution[var_name]
-                if value is not None:
-                    binding[var_name] = str(value)
-            solutions.append(binding)
-        return SparqlSelectResult(solutions)
-
-    # CONSTRUCT/DESCRIBE query returns QueryTriples - convert to QuadResult list
-    construct_results = [
-        QuadResult(
-            subject=str(triple.subject),
-            predicate=str(triple.predicate),
-            object=str(triple.object),
-            graph="default graph",  # Triples from CONSTRUCT/DESCRIBE don't have explicit graphs
-        )
-        for triple in results
-    ]
-    return SparqlConstructResult(construct_results)
-
-
-@mcp.resource(uri="rdf://graph", mime_type="application/n-quads")
-def export_all_graphs() -> str:
-    """Export all RDF data from the triple store in N-Quads format."""
-
-    # Should not return None because we are not setting output
-    # Should not raise an exception because we are using a format that supports named graphs
-    serialized = store.dump(format=RdfFormat.N_QUADS, from_graph=None)
-    assert serialized is not None
-
-    try:
-        return serialized.decode("utf-8")
-    except Exception as e:
-        raise ResourceError(f"Failed to export RDF data: {e}") from e
-
-
-@mcp.resource(uri="rdf://graph/{graph_name}", mime_type="application/n-triples")
-def export_named_graph(graph_name: str) -> str:
-    """Export a specific named graph in N-Triples format."""
-    try:
-        # Convert graph name to URI
-        graph_uri = create_graph_uri(graph_name)
-
-        # Export specific graph in N-Quads format
-        serialized = store.dump(format=RdfFormat.N_TRIPLES, from_graph=graph_uri)
-        assert serialized is not None
-
-        return serialized.decode("utf-8")
-    except Exception as e:
-        raise ResourceError(f"Failed to export graph '{graph_name}': {e}") from e
-
-
-@mcp.resource(uri="rdf://graph/prefix", mime_type="application/json")
-def export_global_prefixes() -> dict[str, str]:
-    """Export global RDF prefix definitions."""
-    return global_prefixes
-
-
-@mcp.resource(uri="rdf://graph/{graph_name}/prefix", mime_type="application/json")
-def export_graph_prefixes(graph_name: str) -> dict[str, str]:
-    """Export effective prefixes for specific graph (global + graph-specific)."""
-    effective_prefixes = global_prefixes.copy()
-    if graph_name in graph_prefixes:
-        effective_prefixes.update(graph_prefixes[graph_name])
-    return effective_prefixes
+    # Register resources
+    mcp.resource("rdf://graph", mime_type="application/n-quads")(server.export_all_graphs)
+    mcp.resource("rdf://graph/{graph_name}", mime_type="application/n-triples")(server.export_named_graph)
+    mcp.resource("rdf://graph/prefix", mime_type="application/json")(server.export_global_prefixes)
+    mcp.resource("rdf://graph/{graph_name}/prefix", mime_type="application/json")(server.export_graph_prefixes)
