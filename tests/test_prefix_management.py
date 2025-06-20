@@ -223,7 +223,7 @@ async def test_curie_expansion_stores_expanded_iris(client: Client):
 
     # Query to check what's actually stored
     result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }"})
-    
+
     raw_data = parse_sparql_result(result)
     assert len(raw_data) == 1, "Expected exactly one triple"
 
@@ -254,7 +254,7 @@ async def test_expanded_curies_match_sparql_prefix_queries(client: Client):
     """
 
     result = await client.call_tool("rdf_sparql_query", {"query": sparql_query})
-    
+
     query_data = parse_sparql_result(result)
     assert len(query_data) == 1, "Expected to find the friend"
 
@@ -277,7 +277,7 @@ async def test_curie_expansion_with_literal_objects(client: Client):
 
     # Query to verify expansion
     result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }"})
-    
+
     data = parse_sparql_result(result)
     assert len(data) == 1
 
@@ -298,7 +298,7 @@ async def test_prefix_expansion_with_undefined_prefix(client: Client):
 
     # Query to see what was stored
     result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }"})
-    
+
     raw_data = parse_sparql_result(result)
     assert len(raw_data) > 0
 
@@ -328,7 +328,7 @@ async def test_prefix_expansion_with_standard_namespaces(client: Client):
     """
 
     result = await client.call_tool("rdf_sparql_query", {"query": sparql_query})
-    
+
     query_data = parse_sparql_result(result)
     assert len(query_data) == 1
     assert "http://example.org/person/john" in query_data[0]["person"]
@@ -348,14 +348,23 @@ async def test_graph_specific_prefix_overrides_global_during_expansion(client: C
     # Add triple to special graph using CURIE
     await client.call_tool(
         "rdf_add_triples",
-        {"triples": [{"subject": "test:item", "predicate": "test:property", "object": "test:value", "graph_name": "special-graph"}]},
+        {
+            "triples": [
+                {
+                    "subject": "test:item",
+                    "predicate": "test:property",
+                    "object": "test:value",
+                    "graph_name": "special-graph",
+                }
+            ]
+        },
     )
 
     # Query the special graph to verify correct expansion
     result = await client.call_tool(
         "rdf_sparql_query", {"query": "SELECT ?s ?p ?o FROM <http://mcp.local/special-graph> WHERE { ?s ?p ?o . }"}
     )
-    
+
     data = parse_sparql_result(result)
     assert len(data) == 1
 
@@ -379,7 +388,7 @@ async def test_global_prefix_used_in_default_graph(client: Client):
 
     # Query to verify correct expansion
     result = await client.call_tool("rdf_sparql_query", {"query": "SELECT ?s ?p ?o WHERE { ?s ?p ?o . }"})
-    
+
     data = parse_sparql_result(result)
     assert len(data) == 1
 

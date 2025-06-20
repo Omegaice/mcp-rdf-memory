@@ -13,15 +13,15 @@ Functions are organized into:
 
 def is_empty_or_whitespace(value: str) -> bool:
     """Check if a string is empty or contains only whitespace.
-    
+
     This is a basic utility function used by other validation functions.
-    
+
     Args:
         value: String to check
-        
+
     Returns:
         True if the string is empty or whitespace-only, False otherwise
-        
+
     Examples:
         >>> is_empty_or_whitespace("")
         True
@@ -37,21 +37,21 @@ def is_empty_or_whitespace(value: str) -> bool:
 
 def validate_prefix(prefix: str) -> str:
     """Validate RDF prefix format.
-    
+
     A valid RDF prefix must:
     - Not be empty or whitespace-only
     - Not contain colons (those are for CURIEs)
     - Contain only alphanumeric characters, hyphens, and underscores
-    
+
     Args:
         prefix: The prefix string to validate
-        
+
     Returns:
         The trimmed prefix string if valid
-        
+
     Raises:
         ValueError: If the prefix is invalid
-        
+
     Examples:
         >>> validate_prefix("rdf")
         'rdf'
@@ -71,7 +71,7 @@ def validate_prefix(prefix: str) -> str:
 
     # Trim whitespace first
     trimmed_prefix = prefix.strip()
-    
+
     # Check again after trimming in case it becomes empty
     if not trimmed_prefix:
         raise ValueError("Prefix cannot be empty or whitespace-only")
