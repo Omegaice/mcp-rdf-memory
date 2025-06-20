@@ -88,6 +88,49 @@ def create_graph_uri(graph_name: str | None) -> NamedNode | None:
     return NamedNode(f"http://mcp.local/{graph_name.strip()}")
 
 
+def is_curie(value: str) -> bool:
+    """Check if a string matches the CURIE pattern (prefix:localname)."""
+    # Basic CURIE pattern: alphanumeric prefix, colon, non-empty local part
+    # Does not match full URIs (which contain ://)
+    if "://" in value:
+        return False
+    parts = value.split(":", 1)
+    if len(parts) != 2:
+        return False
+    prefix, local = parts
+    # Prefix should be alphanumeric (possibly with _ or -)
+    # Local part should be non-empty
+    return bool(prefix and local and prefix.replace("_", "a").replace("-", "a").isalnum())
+
+
+def expand_curie(value: str, global_prefixes: dict[str, str], graph_prefixes: dict[str, str] | None = None) -> str:
+    """Expand a CURIE to a full IRI if the prefix is defined.
+
+    Args:
+        value: The potential CURIE string
+        global_prefixes: Global prefix mappings
+        graph_prefixes: Graph-specific prefix mappings (override global)
+
+    Returns:
+        Expanded IRI if prefix is found, otherwise original value
+    """
+    if not is_curie(value):
+        return value
+
+    prefix, local = value.split(":", 1)
+
+    # Check graph-specific prefixes first (they override global)
+    if graph_prefixes and prefix in graph_prefixes:
+        return graph_prefixes[prefix] + local
+
+    # Check global prefixes
+    if prefix in global_prefixes:
+        return global_prefixes[prefix] + local
+
+    # No prefix found, return as-is
+    return value
+
+
 # Pydantic validated types with JSON schema support
 RDFIdentifier = Annotated[
     str,
@@ -138,8 +181,17 @@ class RDFMemoryServer:
         self.store_path = store_path  # Keep for backward compatibility
         self.store_manager = StoreManager(store_path)
 
-        # Initialize prefix storage
-        self.global_prefixes: dict[str, str] = {}
+        # Initialize prefix storage with standard RDF namespaces
+        self.global_prefixes: dict[str, str] = {
+            "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+            "owl": "http://www.w3.org/2002/07/owl#",
+            "xsd": "http://www.w3.org/2001/XMLSchema#",
+            "foaf": "http://xmlns.com/foaf/0.1/",
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "dcterms": "http://purl.org/dc/terms/",
+            "schema": "http://schema.org/",
+        }
         self.graph_prefixes: dict[str, dict[str, str]] = {}
 
     @property
@@ -206,10 +258,20 @@ class RDFMemoryServer:
         Use rdf_sparql_query for complex insertions."""
         quads = []
         for triple in triples:
+            # Get graph-specific prefixes if graph is specified
+            graph_prefixes = None
+            if triple.graph_name and triple.graph_name in self.graph_prefixes:
+                graph_prefixes = self.graph_prefixes[triple.graph_name]
+
+            # Expand CURIEs to full IRIs
+            expanded_subject = expand_curie(triple.subject, self.global_prefixes, graph_prefixes)
+            expanded_predicate = expand_curie(triple.predicate, self.global_prefixes, graph_prefixes)
+            expanded_object = expand_curie(triple.object, self.global_prefixes, graph_prefixes)
+
             # Convert validated strings to RDF objects
-            subject_node = NamedNode(triple.subject)
-            predicate_node = NamedNode(triple.predicate)
-            object_node = create_rdf_node(triple.object)
+            subject_node = NamedNode(expanded_subject)
+            predicate_node = NamedNode(expanded_predicate)
+            object_node = create_rdf_node(expanded_object)
             graph_node = create_graph_uri(triple.graph_name)
 
             quad = Quad(subject_node, predicate_node, object_node, graph_node)
